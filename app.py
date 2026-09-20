@@ -11,7 +11,6 @@ import sys
 import pandas as pd
 import random
 import smtplib
-from datetime import datetime, timezone
 from email.mime.text import MIMEText
 from flask import session
 from werkzeug.utils import secure_filename
@@ -28,7 +27,7 @@ import smtplib
 from email.mime.text import MIMEText
 from flask import session, request, redirect, render_template
 from flask import Flask, render_template, request, redirect, session
-from pymongo import MongoClient, ReturnDocument, ASCENDING
+from pymongo import MongoClient
 from scripts.admin_raster_clip import (
     admin_clip_precipitation_raster,
     admin_clip_temperature_raster,
@@ -36,235 +35,19 @@ from scripts.admin_raster_clip import (
     collaborator_clip_temperature_raster
 
 )
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
 app = Flask(__name__, template_folder="template")
-
-# 🔹 Static Data Source (R2)
-DATA_BASE_URL = os.getenv(
-    "DATA_BASE_URL",
-    "https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev"
-).rstrip("/")
-
-# 🔹 API Base URL (Render)
-API_BASE_URL = os.getenv(
-    "API_BASE_URL",
-    "https://narmada-project.onrender.com"
-).rstrip("/")
-
-# Warn if missing (optional since we added defaults)
-if not DATA_BASE_URL:
-    raise ValueError("DATA_BASE_URL is not set.")
-
-# Sync for subprocess usage
-os.environ["DATA_BASE_URL"] = DATA_BASE_URL
-os.environ["API_BASE_URL"] = API_BASE_URL
-# CORS (restrict in production if needed)
 CORS(app)
-
 district_cache = None
 mean_cache = {}
-
-# Use dynamic port (important for Render)
-PORT = int(os.environ.get("PORT", 5000))
+PORT = 5000
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-
-
-def _utc_now_iso():
-    return datetime.now(timezone.utc).isoformat()
-
-
-def _jobs_collection():
-    return db[os.getenv("JOBS_COLLECTION", "jobs_queue")]
-
-
-def _next_job_id():
-    counter = db["counters"].find_one_and_update(
-        {"_id": "jobs_queue"},
-        {"$inc": {"seq": 1}},
-        upsert=True,
-        return_document=ReturnDocument.AFTER,
-    )
-    return int(counter["seq"])
-
-
-def _serialize_job(job_doc):
-    if not job_doc:
-        return None
-    return {
-        "id": job_doc.get("id"),
-        "type": job_doc.get("type"),
-        "params": job_doc.get("params", {}),
-        "status": job_doc.get("status"),
-        "created_at": job_doc.get("created_at"),
-        "claimed_at": job_doc.get("claimed_at"),
-        "completed_at": job_doc.get("completed_at"),
-        "worker": job_doc.get("worker"),
-        "result": job_doc.get("result"),
-        "error": job_doc.get("error"),
-    }
-
-
-def get_data_path(path):
-    if not DATA_BASE_URL:
-        raise RuntimeError("DATA_BASE_URL is not configured. Set DATA_BASE_URL to your permanent data host.")
-    return f"{DATA_BASE_URL}/{path.lstrip('/')}"
-
-
-def read_data_geofile(relative_path):
-    url = get_data_path(relative_path)
-    try:
-        return gpd.read_file(url)
-    except Exception as exc:
-        raise RuntimeError(
-            f"Unable to fetch geofile from data server: {url}. "
-            f"Check DATA_BASE_URL and DNS/network reachability."
-        ) from exc
-
-
-@app.route("/create-job", methods=["POST"])
-def create_job():
-    data = request.get_json(silent=True) or {}
-
-    job_type = data.get("type", "clip_precip")
-    params = data.get("params") if isinstance(data.get("params"), dict) else data
-
-    job = {
-        "id": _next_job_id(),
-        "type": job_type,
-        "params": params,
-        "status": "pending",
-        "created_at": _utc_now_iso(),
-        "claimed_at": None,
-        "completed_at": None,
-        "worker": None,
-        "result": None,
-        "error": None,
-    }
-
-    try:
-        _jobs_collection().insert_one(job)
-    except Exception as exc:
-        return jsonify({"error": f"Failed to create job: {exc}"}), 500
-
-    return jsonify(job), 201
-
-
-@app.route("/get-jobs", methods=["GET"])
-def get_jobs():
-    status = (request.args.get("status") or "pending").strip().lower()
-
-    try:
-        if status == "all":
-            docs = list(_jobs_collection().find({}).sort("id", 1))
-        else:
-            docs = list(_jobs_collection().find({"status": status}).sort("id", 1))
-    except Exception as exc:
-        return jsonify({"error": f"Failed to list jobs: {exc}"}), 500
-
-    result = [_serialize_job(doc) for doc in docs]
-    return jsonify(result)
-
-
-@app.route("/claim-job", methods=["POST"])
-def claim_job():
-    data = request.get_json(silent=True) or {}
-    requested_id = data.get("id")
-    worker_name = (data.get("worker") or "worker").strip()
-
-    try:
-        if requested_id is not None:
-            try:
-                requested_id = int(requested_id)
-            except (TypeError, ValueError):
-                return jsonify({"error": "Invalid job id"}), 400
-
-            target = _jobs_collection().find_one_and_update(
-                {"id": requested_id, "status": "pending"},
-                {
-                    "$set": {
-                        "status": "processing",
-                        "worker": worker_name,
-                        "claimed_at": _utc_now_iso(),
-                    }
-                },
-                return_document=ReturnDocument.AFTER,
-            )
-            if target is None:
-                existing = _jobs_collection().find_one({"id": requested_id}, {"id": 1, "status": 1})
-                if existing is None:
-                    return jsonify({"error": "Job not found"}), 404
-                return jsonify({"error": "Job is not pending"}), 409
-        else:
-            target = _jobs_collection().find_one_and_update(
-                {"status": "pending"},
-                {
-                    "$set": {
-                        "status": "processing",
-                        "worker": worker_name,
-                        "claimed_at": _utc_now_iso(),
-                    }
-                },
-                sort=[("id", ASCENDING)],
-                return_document=ReturnDocument.AFTER,
-            )
-            if target is None:
-                return jsonify({"error": "No pending jobs"}), 404
-    except Exception as exc:
-        return jsonify({"error": f"Failed to claim job: {exc}"}), 500
-
-    return jsonify(_serialize_job(target))
-
-
-@app.route("/complete-job", methods=["POST"])
-def complete_job():
-    data = request.get_json(silent=True) or {}
-
-    if "id" not in data:
-        return jsonify({"error": "Job id is required"}), 400
-
-    try:
-        job_id = int(data["id"])
-    except (TypeError, ValueError):
-        return jsonify({"error": "Invalid job id"}), 400
-
-    new_status = (data.get("status") or "done").strip().lower()
-    if new_status not in {"done", "failed"}:
-        return jsonify({"error": "Status must be done or failed"}), 400
-
-    try:
-        job = _jobs_collection().find_one_and_update(
-            {"id": job_id},
-            {
-                "$set": {
-                    "status": new_status,
-                    "result": data.get("result"),
-                    "error": data.get("error"),
-                    "completed_at": _utc_now_iso(),
-                }
-            },
-            return_document=ReturnDocument.AFTER,
-        )
-    except Exception as exc:
-        return jsonify({"error": f"Failed to update job: {exc}"}), 500
-
-    if job is None:
-        return jsonify({"error": "Job not found"}), 404
-
-    return jsonify(_serialize_job(job))
-
-
-@app.route("/job-status/<int:job_id>", methods=["GET"])
-def job_status(job_id):
-    try:
-        job = _jobs_collection().find_one({"id": job_id})
-    except Exception as exc:
-        return jsonify({"error": f"Failed to read job: {exc}"}), 500
-
-    if job is None:
-        return jsonify({"error": "not found"}), 404
-    return jsonify(_serialize_job(job))
+BASE_UPLOAD = "data"
+os.makedirs(BASE_UPLOAD, exist_ok=True)
 
 @app.route("/")
 def home():
@@ -281,10 +64,10 @@ def viewer_display():
 def viewer_output():
     return send_from_directory(os.path.join(BASE_DIR, "template", "viewer"), "output.html")
 
-app.secret_key = "secret123"
+app.secret_key = os.getenv("SECRET_KEY")
 
-EMAIL_ADDRESS = "yelpcampMaahi@gmail.com"
-EMAIL_PASSWORD = "aoddophyrvxjwpqz"
+EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 
 
 def send_otp(email, otp):
@@ -333,8 +116,8 @@ def viewer_login():
 ########## admin routes
 
 # 🔐 Hardcoded admin credentials
-ADMIN_EMAIL = "admin@iiti.ac.in"
-ADMIN_PASSWORD = "1234"
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
 
 
 @app.route("/admin/login", methods=['GET', 'POST'])
@@ -378,7 +161,7 @@ def run_admin_gnn_pipeline():
             return jsonify({"error": "Unauthorized"}), 401
         return render_template("admin/login.html", error="You are not Authorised . Login First ")
 
-    scripts_dir = os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "admin", "gnn")
+    scripts_dir = os.path.join(BASE_DIR, "data", "admin", "gnn")
     ordered_scripts = [
         "app.py",
         "app_testing.py",
@@ -390,8 +173,8 @@ def run_admin_gnn_pipeline():
     candidate_pythons = [
         os.path.join(scripts_dir, "venv", "bin", "python"),
         os.path.join(scripts_dir, "venv", "Scripts", "python.exe"),
-        os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "admin", "gnn", "venv", "bin", "python"),
-        os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "admin", "gnn", "venv", "Scripts", "python.exe"),
+        os.path.join(BASE_DIR, "data", "admin", "gnn", "venv", "bin", "python"),
+        os.path.join(BASE_DIR, "data", "admin", "gnn", "venv", "Scripts", "python.exe"),
         os.path.join(BASE_DIR, ".venv", "Scripts", "python.exe"),
         os.path.join(BASE_DIR, ".venv", "bin", "python"),
         sys.executable,
@@ -417,7 +200,7 @@ def run_admin_gnn_pipeline():
     if python_cmd is None:
         return jsonify({
             "error": "No Python environment with torch found for admin pipeline",
-            "details": "Install torch in admin/gnn/venv or use a compatible environment with torch."
+            "details": "Install torch in data/admin/gnn/venv or use a compatible environment with torch."
         }), 500
 
     try:
@@ -466,7 +249,7 @@ def admin_gnn_wqi_rasters():
     if "admin-logged-in" not in session:
         return jsonify({"error": "Unauthorized"}), 401
 
-    raster_dir = os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "admin", "gnn", "wqi_rasters")
+    raster_dir = os.path.join(BASE_DIR, "data", "admin", "gnn", "wqi_rasters")
     month_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
     if not os.path.exists(raster_dir):
@@ -486,7 +269,7 @@ def admin_gnn_wqi_rasters():
             "month": month,
             "monthIndex": month_order.index(month),
             "file": fname,
-            "url": f"{BASE_URL}/admin/gnn/wqi_rasters/{fname}"
+            "url": f"/data/admin/gnn/wqi_rasters/{fname}"
         })
 
     parsed.sort(key=lambda x: (x["year"], x["monthIndex"]))
@@ -511,7 +294,7 @@ def admin_gnn_wqi_rasters():
 
 @app.route("/api/viewer-gnn-wqi-rasters", methods=["GET"])
 def viewer_gnn_wqi_rasters():
-    raster_dir = os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "admin", "gnn", "wqi_rasters")
+    raster_dir = os.path.join(BASE_DIR, "data", "admin", "gnn", "wqi_rasters")
     month_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
     if not os.path.exists(raster_dir):
@@ -531,7 +314,7 @@ def viewer_gnn_wqi_rasters():
             "month": month,
             "monthIndex": month_order.index(month),
             "file": fname,
-            "url": f"{BASE_URL}/admin/gnn/wqi_rasters/{fname}"
+            "url": f"/data/admin/gnn/wqi_rasters/{fname}"
         })
 
     parsed.sort(key=lambda x: (x["year"], x["monthIndex"]))
@@ -559,7 +342,7 @@ def collaborator_gnn_wqi_rasters():
     if "collab_id" not in session:
         return jsonify({"error": "Unauthorized"}), 401
     collab_id=session['collab_id']
-    raster_dir = os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "collaborator", collab_id, "gnn", "wqi_rasters")
+    raster_dir = os.path.join(BASE_DIR, "data", "collaborator",collab_id, "gnn", "wqi_rasters")
     month_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
     if not os.path.exists(raster_dir):
@@ -579,7 +362,7 @@ def collaborator_gnn_wqi_rasters():
             "month": month,
             "monthIndex": month_order.index(month),
             "file": fname,
-            "url": f"{BASE_URL}/collaborator/{collab_id}/gnn/wqi_rasters/{fname}"
+            "url": f"/data/collaborator/{collab_id}/gnn/wqi_rasters/{fname}"
         })
 
     parsed.sort(key=lambda x: (x["year"], x["monthIndex"]))
@@ -642,7 +425,7 @@ def admin_clear_display():
         return jsonify({"error": "Unauthorized"}), 401
 
     try:
-        folder_path = os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "admin", "display")
+        folder_path = os.path.join(BASE_DIR, "data", "admin", "display")
         clear_directory_contents(folder_path)
         return jsonify({"message": "Display directory cleared"}), 200
     except Exception as e:
@@ -655,7 +438,7 @@ def admin_clear_training():
         return jsonify({"error": "Unauthorized"}), 401
 
     try:
-        folder_path = os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "admin", "gnn", "training_input")
+        folder_path = os.path.join(BASE_DIR, "data", "admin", "gnn", "training_input")
         clear_directory_contents(folder_path)
         return jsonify({"message": "Training directory cleared"}), 200
     except Exception as e:
@@ -668,12 +451,31 @@ def admin_clear_testing():
         return jsonify({"error": "Unauthorized"}), 401
 
     try:
-        folder_path = os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "admin", "gnn", "testing_input")
+        folder_path = os.path.join(BASE_DIR, "data", "admin", "gnn", "testing_input")
         clear_directory_contents(folder_path)
         return jsonify({"message": "Testing directory cleared"}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
+@app.route("/api/admin/upload/stations", methods=["GET", "POST"])
+def admin_upload_stations():
+    if "admin-logged-in" not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    if request.method == "POST":
+        file = request.files.get("file")
+        if not file or file.filename == "":
+            return jsonify({"error": "No file provided"}), 400
+        if not file.filename.endswith(".csv"):
+            return jsonify({"error": "Only CSV files are accepted"}), 400
+
+        save_dir = os.path.join(BASE_DIR, "data", "admin", "gnn")
+        os.makedirs(save_dir, exist_ok=True)
+        file.save(os.path.join(save_dir, "upstream_to_downstream_stations.csv"))
+        return jsonify({"message": "Station topology uploaded successfully"}), 200
+
+    return jsonify({"error": "Method not allowed"}), 405
 
 @app.route("/api/admin-upload-testing-data", methods=["POST"])
 def admin_upload_testing_data():
@@ -689,15 +491,15 @@ def admin_upload_testing_data():
         type_config = {
             "csv": {
                 "extension": ".csv",
-                "folder": os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "admin", "gnn", "testing_input")
+                "folder": os.path.join(BASE_DIR, "data", "admin", "gnn", "testing_input")
             },
             "lulc": {
                 "extension": ".tif",
-                "folder": os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "admin", "gnn", "testing_input", "lulc")
+                "folder": os.path.join(BASE_DIR, "data", "admin", "gnn", "testing_input", "lulc")
             },
             "pop": {
                 "extension": ".tif",
-                "folder": os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "admin", "gnn", "testing_input", "pop")
+                "folder": os.path.join(BASE_DIR, "data", "admin", "gnn", "testing_input", "pop")
             }
         }
 
@@ -739,7 +541,8 @@ def update_all_stations_training():
                 return jsonify({"error": f"Only .tif files allowed for {upload_type}"}), 400
 
             raster_upload_folder = os.path.join(
-                "https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev",
+                BASE_DIR,
+                "data",
                 "admin",
                 "gnn",
                 "training_input",
@@ -770,7 +573,7 @@ def update_all_stations_training():
 
         df.set_index("station", inplace=True)
 
-        BASE = os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "admin", "gnn", "training_input")
+        BASE = os.path.join(BASE_DIR, "data", "admin", "gnn", "training_input")
 
         month_map = {
             "1": "Jan", "2": "Feb", "3": "Mar",
@@ -840,7 +643,8 @@ def update_all_stations_display():
                 return jsonify({"error": f"Only .tif files allowed for {upload_type}"}), 400
 
             raster_upload_folder = os.path.join(
-                "https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev",
+                BASE_DIR,
+                "data",
                 "admin",
                 "display",
                 "raster",
@@ -871,7 +675,7 @@ def update_all_stations_display():
 
         df.set_index("station", inplace=True)
 
-        BASE = os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "admin", "display")
+        BASE = os.path.join(BASE_DIR, "data", "admin", "display")
 
         month_map = {
             "1": "Jan", "2": "Feb", "3": "Mar",
@@ -949,7 +753,8 @@ def admin_generate_precip_year():
 
         
         raster_path = os.path.join(
-            "https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev",
+            BASE_DIR,
+            "data",
             "admin",
             "display",
             "precip",
@@ -966,7 +771,7 @@ def admin_generate_precip_year():
       
         return jsonify({
             "message": f"Raster generated for {year}",
-            "file": f"{BASE_URL}/admin/display/precip/output_precip_rasters/precip_{year}_30m.tif"
+            "file": f"data/admin/display/precip/output_precip_rasters/precip_{year}_30m.tif"
         })
 
     except Exception as e:
@@ -994,7 +799,8 @@ def admin_generate_temp_year():
 
         
         raster_path = os.path.join(
-            "https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev",
+            BASE_DIR,
+            "data",
             "admin",
             "display",
             "temp",
@@ -1011,7 +817,7 @@ def admin_generate_temp_year():
       
         return jsonify({
             "message": f"Raster generated for {year}",
-            "file": f"{BASE_URL}/admin/display/temp/output_temp_rasters/temp_{year}_30m.tif"
+            "file": f"data/admin/display/temp/output_temp_rasters/temp_{year}_30m.tif"
         })
 
     except Exception as e:
@@ -1038,7 +844,8 @@ def admin_generate_streamflow_year():
 
         
         raster_path = os.path.join(
-            "https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev",
+            BASE_DIR,
+            "data",
             "admin",
             "display",
             "streamflow",
@@ -1055,7 +862,7 @@ def admin_generate_streamflow_year():
       
         return jsonify({
             "message": f"Raster generated for {year , month}",
-            "file": f"{BASE_URL}/admin/display/streamflow/output_streamflow_rasters/streamflow_{year}_{month}_30m.tif"
+            "file": f"data/admin/display/streamflow/output_streamflow_rasters/streamflow_{year}_{month}_30m.tif"
         })
 
     except Exception as e:
@@ -1082,7 +889,8 @@ def admin_generate_waterlevel_year():
 
         
         raster_path = os.path.join(
-            "https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev",
+            BASE_DIR,
+            "data",
             "admin",
             "display",
             "waterlevel",
@@ -1099,7 +907,7 @@ def admin_generate_waterlevel_year():
       
         return jsonify({
             "message": f"Raster generated for {year}",
-            "file": f"{BASE_URL}/admin/display/waterlevel/output_waterlevel_rasters/waterlevel_{year}_{month}_30m.tif"
+            "file": f"data/admin/display/waterlevel/output_waterlevel_rasters/waterlevel_{year}_{month}_30m.tif"
         })
 
     except Exception as e:
@@ -1133,8 +941,14 @@ def admin_clip_temperature():
 @app.route("/api/admin-rivers-per-district")
 def admin_rivers_per_district():
     try:
-        districts = read_data_geofile("admin/display/geojson/district_boundary.geojson")
-        rivers = read_data_geofile("admin/display/geojson/narmada_named_network.geojson")
+        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+        district_path = os.path.join(BASE_DIR, "data","admin","display", "geojson", "district_boundary.geojson")
+        river_path = os.path.join(BASE_DIR, "data","admin","display", "geojson", "narmada_named_network.geojson")
+
+
+        districts = gpd.read_file(district_path)
+        rivers = gpd.read_file(river_path)
 
         if districts.crs is None:
             districts.set_crs("EPSG:4326", inplace=True)
@@ -1187,8 +1001,8 @@ def admin_districts():
     if district_cache is not None:
         return jsonify(district_cache)
 
-    districts_gdf = read_data_geofile("admin/display/geojson/district_boundary.geojson").to_crs("EPSG:4326")
-    narmada = read_data_geofile("admin/display/geojson/narmada.geojson").to_crs("EPSG:4326")
+    districts_gdf = gpd.read_file(os.path.join(BASE_DIR, "data","admin","display", "geojson", "district_boundary.geojson")).to_crs("EPSG:4326")
+    narmada = gpd.read_file(os.path.join(BASE_DIR, "data","admin","display", "geojson", "narmada.geojson")).to_crs("EPSG:4326")
     narmada_geom = narmada.geometry.union_all()
     filtered = districts_gdf[districts_gdf.intersects(narmada_geom)]
     district_cache = sorted(filtered["District"].dropna().unique().tolist())
@@ -1227,7 +1041,7 @@ def admin_mean():
 @app.route("/api/admin-get-years/<dataset>")
 def admin_get_years(dataset):
 
-    base_path = os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "admin", "display")
+    base_path = os.path.join(BASE_DIR, "data", "admin", "display")
 
     try:
 
@@ -1317,14 +1131,13 @@ def admin_get_years(dataset):
 
 @app.route("/api/admin-raster-range-meta", methods=["GET"])
 def admin_raster_range_meta():
-    raster_dir = os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "admin", "display", "raster")
+    raster_dir = os.path.join(BASE_DIR, "data", "admin", "display", "raster")
 
     def pick_file(kind):
         if not os.path.exists(raster_dir):
             return None
 
-        range_candidates = []
-        fallback_candidates = []
+        candidates = []
         for fname in os.listdir(raster_dir):
             lower = fname.lower()
             if not lower.endswith(".tif"):
@@ -1341,32 +1154,23 @@ def admin_raster_range_meta():
 
             import re
             match = re.match(r"^((?:19|20)\d{2})_((?:19|20)\d{2})_(.+)\.tif$", fname)
-            if match:
-                start_year = int(match.group(1))
-                end_year = int(match.group(2))
-                range_candidates.append((start_year, end_year, fname))
-            else:
-                fallback_candidates.append(fname)
+            if not match:
+                continue
 
-        if range_candidates:
-            # Prefer latest range if multiple files exist.
-            start_year, end_year, selected = sorted(range_candidates, key=lambda x: (x[0], x[1]))[-1]
-            return {
-                "file": selected,
-                "startYear": start_year,
-                "endYear": end_year,
-            }
+            start_year = int(match.group(1))
+            end_year = int(match.group(2))
+            candidates.append((start_year, end_year, fname))
 
-        if fallback_candidates:
-            # Fallback for files like precip_raster.tif/temp_raster.tif.
-            fallback_candidates.sort()
-            return {
-                "file": fallback_candidates[-1],
-                "startYear": None,
-                "endYear": None,
-            }
+        if not candidates:
+            return None
 
-        return None
+        # Prefer latest range if multiple files exist.
+        start_year, end_year, selected = sorted(candidates, key=lambda x: (x[0], x[1]))[-1]
+        return {
+            "file": selected,
+            "startYear": start_year,
+            "endYear": end_year,
+        }
 
     precip_meta = pick_file("precip")
     temp_meta = pick_file("temp")
@@ -1381,17 +1185,11 @@ def admin_raster_range_meta():
 ##collaborator
 
 # ================== MONGODB ATLAS ==================
-MONGO_URI = "mongodb+srv://Maahick:Mahi2323@cluster0.hfs9kyb.mongodb.net/yelpcamp?retryWrites=true&w=majority"
+MONGO_URI = os.getenv("MONGO_URI")
 
 client = MongoClient(MONGO_URI)
 db = client["narmada_project"]
 collaborators = db["collaborators"]
-
-try:
-    _jobs_collection().create_index([("id", ASCENDING)], unique=True)
-    _jobs_collection().create_index([("status", ASCENDING), ("id", ASCENDING)])
-except Exception as exc:
-    print(f"WARNING: Unable to ensure queue indexes: {exc}")
 
 # ================== COLLABORATOR LOGIN + REGISTER ==================
 @app.route("/collaborator/login", methods=["GET", "POST"])
@@ -1421,7 +1219,7 @@ def collaborator_login():
             collab_id = str(new_user.inserted_id)
 
             # 🔥 CREATE FOLDER STRUCTURE
-            base_path = os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "collaborator", collab_id)
+            base_path = os.path.join(BASE_DIR, "data", "collaborator", collab_id)
 
             os.makedirs(os.path.join(base_path, "display"), exist_ok=True)
             os.makedirs(os.path.join(base_path,"gnn" , "training_input"), exist_ok=True)
@@ -1488,7 +1286,7 @@ def collaborator_clear_display():
         return jsonify({"error": "Unauthorized"}), 401
 
     try:
-        folder_path = os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "collaborator", session["collab_id"], "display")
+        folder_path = os.path.join(BASE_DIR, "data", "collaborator", session["collab_id"], "display")
         clear_directory_contents(folder_path)
         return jsonify({"message": "Display directory cleared"}), 200
     except Exception as e:
@@ -1500,7 +1298,7 @@ def collaborator_clear_training():
         return jsonify({"error": "Unauthorized"}), 401
 
     try:
-        folder_path = os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "collaborator", session["collab_id"], "gnn", "training_input")
+        folder_path = os.path.join(BASE_DIR, "data", "collaborator", session["collab_id"], "gnn", "training_input")
         clear_directory_contents(folder_path)
         return jsonify({"message": "Training directory cleared"}), 200
     except Exception as e:
@@ -1512,7 +1310,7 @@ def collaborator_clear_testing():
         return jsonify({"error": "Unauthorized"}), 401
 
     try:
-        folder_path = os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "collaborator", session["collab_id"], "gnn", "testing_input")
+        folder_path = os.path.join(BASE_DIR, "data", "collaborator", session["collab_id"], "gnn", "testing_input")
         clear_directory_contents(folder_path)
         return jsonify({"message": "Testing directory cleared"}), 200
     except Exception as e:
@@ -1537,6 +1335,26 @@ def collaborator_upload_testing():
       return redirect("/collaborator/login")
      return send_from_directory(os.path.join(BASE_DIR, "template","collaborator"), "upload_testing.html")
     
+
+@app.route("/api/collaborator/upload/stations", methods=["GET", "POST"])
+def collaborator_upload_stations():
+    if "collab_id" not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    if request.method == "POST":
+        file = request.files.get("file")
+        if not file or file.filename == "":
+            return jsonify({"error": "No file provided"}), 400
+        if not file.filename.endswith(".csv"):
+            return jsonify({"error": "Only CSV files are accepted"}), 400
+
+        save_dir = os.path.join(BASE_DIR, "data", "collaborator", session["collab_id"], "gnn")
+        os.makedirs(save_dir, exist_ok=True)
+        file.save(os.path.join(save_dir, "upstream_to_downstream_stations.csv"))
+        return jsonify({"message": "Station topology uploaded successfully"}), 200
+
+    return jsonify({"error": "Method not allowed"}), 405
+
 @app.route("/runcol", methods=["GET", "POST"])
 def run_collaborator_gnn_pipeline():
     if "collab_id" not in session:
@@ -1544,8 +1362,8 @@ def run_collaborator_gnn_pipeline():
             return jsonify({"error": "Unauthorized"}), 401
         return render_template("collaborator/login.html", error="You are not Authorised . Login First ")
     collab_id=session['collab_id']
-    scripts_dir = os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "collaborator", "gnn")
-    collab_gnn_dir = os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "collaborator", collab_id, "gnn")
+    scripts_dir = os.path.join(BASE_DIR, "data", "collaborator", "gnn")
+    collab_gnn_dir = os.path.join(BASE_DIR, "data", "collaborator", collab_id, "gnn")
     required_streamflow_dir = os.path.join(collab_gnn_dir, "training_input", "streamflow")
 
     if not os.path.exists(required_streamflow_dir):
@@ -1563,14 +1381,14 @@ def run_collaborator_gnn_pipeline():
     ]
 
     candidate_pythons = [
-        os.path.join(scripts_dir, "venv", "bin", "python"),
-        os.path.join(scripts_dir, "venv", "Scripts", "python.exe"),
-        os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "admin", "gnn", "venv", "bin", "python"),
-        os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "admin", "gnn", "venv", "Scripts", "python.exe"),
-        os.path.join(BASE_DIR, ".venv", "Scripts", "python.exe"),
-        os.path.join(BASE_DIR, ".venv", "bin", "python"),
-        sys.executable,
-    ]
+    os.path.join(BASE_DIR, "data", "admin", "gnn", "venv", "bin", "python"),
+    os.path.join(BASE_DIR, "data", "admin", "gnn", "venv", "Scripts", "python.exe"),
+    os.path.join(scripts_dir, "venv", "bin", "python"),
+    os.path.join(scripts_dir, "venv", "Scripts", "python.exe"),
+    os.path.join(BASE_DIR, ".venv", "Scripts", "python.exe"),
+    os.path.join(BASE_DIR, ".venv", "bin", "python"),
+    sys.executable,
+]
 
     python_cmd = None
     for candidate in candidate_pythons:
@@ -1592,7 +1410,7 @@ def run_collaborator_gnn_pipeline():
     if python_cmd is None:
         return jsonify({
             "error": "No Python environment with torch found for collaborator pipeline",
-            "details": "Install torch in collaborator/gnn/venv or admin/gnn/venv."
+            "details": "Install torch in data/collaborator/gnn/venv or data/admin/gnn/venv."
         }), 500
 
     try:
@@ -1646,15 +1464,15 @@ def collaborator_upload_testing_data():
         type_config = {
             "csv": {
                 "extension": ".csv",
-                "folder": os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "collaborator", collab_id, "gnn", "testing_input")
+                "folder": os.path.join(BASE_DIR, "data", "collaborator", collab_id, "gnn", "testing_input")
             },
             "lulc": {
                 "extension": ".tif",
-                "folder": os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "collaborator", collab_id, "gnn", "testing_input", "lulc")
+                "folder": os.path.join(BASE_DIR, "data", "collaborator", collab_id, "gnn", "testing_input", "lulc")
             },
             "pop": {
                 "extension": ".tif",
-                "folder": os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "collaborator", collab_id, "gnn", "testing_input", "pop")
+                "folder": os.path.join(BASE_DIR, "data", "collaborator", collab_id, "gnn", "testing_input", "pop")
             }
         }
 
@@ -1705,7 +1523,7 @@ def collaborator_update_all_stations_display():
         df.set_index("station", inplace=True)
 
         collab_id = session["collab_id"]
-        BASE = os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "collaborator", collab_id, "display")
+        BASE = os.path.join(BASE_DIR, "data", "collaborator", collab_id, "display")
 
         month_map = {
             "1": "Jan", "2": "Feb", "3": "Mar",
@@ -1844,7 +1662,7 @@ def upload_all_display():
 
         print("Collab ID:", collab_id)
 
-        upload_folder = os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "collaborator", collab_id, "display", "geojson")
+        upload_folder = os.path.join(BASE_DIR, "data", "collaborator", collab_id, "display", "geojson")
 
         # ✅ CREATE FOLDER (FIX)
         os.makedirs(upload_folder, exist_ok=True)
@@ -1891,79 +1709,190 @@ def upload_all_display():
 # =========================
 # UPLOAD-CHUNK  (Rasters & CSVs)
 # =========================
-DATA_DIR = os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev")
+DATA_DIR = os.path.join(BASE_DIR, "data")
 
+# @app.route("/collaborator/display/upload-chunk", methods=["POST"])
+# def upload_chunk_display():
+#     try:
+#         collab_id = session.get("collab_id")
+#         if not collab_id:
+#             return jsonify({"error": "Not logged in"}), 401
+
+#         file = request.files.get("file")
+#         filename = secure_filename(request.form.get("filename", ""))
+#         chunk_index = int(request.form.get("chunkIndex", 0))
+#         total_chunks = int(request.form.get("totalChunks", 1))
+#         file_category = (request.form.get("fileCategory", "") or "").strip().lower()
+#         field_name = request.form.get("fieldName", "")
+
+#         if not file or not filename:
+#             return jsonify({"error": "Missing file data"}), 400
+
+#         base_folder = os.path.join(BASE_DIR, "data", "collaborator", collab_id, "display")
+#         os.makedirs(base_folder, exist_ok=True)
+#         temp_dir = os.path.join(base_folder, "temp_chunks")
+#         os.makedirs(temp_dir, exist_ok=True)
+      
+
+#         # Raster rename
+#         raster_map = {
+#             "precip_raster": "precip_raster.tif",
+#             "temp_raster": "temp_raster.tif",
+#             "lulc_raster": "lulc_raster.tif",
+#             "pop_raster": "pop_raster.tif",
+#         }
+
+#         if file_category == "raster" and field_name in raster_map:
+#             filename = raster_map[field_name]
+
+#         chunk_path = os.path.join(temp_dir, f"{filename}.part{chunk_index}")
+#         file.save(chunk_path)
+
+#         if chunk_index == total_chunks - 1:
+
+#             category_to_dir = {
+#                 "precip": os.path.join(base_folder, "precip"),
+#                 "temp": os.path.join(base_folder, "temp"),
+#                 "streamflow": os.path.join(base_folder, "streamflow"),
+#                 "waterlevel": os.path.join(base_folder, "waterlevel"),
+#                 "lulc_raster": os.path.join(base_folder, "raster", "lulc"),
+#                 "pop_raster": os.path.join(base_folder, "raster", "pop"),
+#                 "raster": os.path.join(base_folder, "raster"),
+#             }
+#             dest_dir = category_to_dir.get(file_category, base_folder)
+
+#             base_abs = os.path.abspath(base_folder)
+#             dest_abs = os.path.abspath(dest_dir)
+#             if not dest_abs.startswith(base_abs + os.sep) and dest_abs != base_abs:
+#                 return jsonify({"error": "Invalid upload destination"}), 400
+
+#             os.makedirs(dest_dir, exist_ok=True)
+#             final_path = os.path.join(dest_dir, filename)
+
+#             with open(final_path, "wb") as out:
+#                 for i in range(total_chunks):
+#                     part = os.path.join(temp_dir, f"{filename}.part{i}")
+#                     with open(part, "rb") as p:
+#                         out.write(p.read())
+#                     os.remove(part)
+
+#             print(f"✅ Saved → {final_path} (category={file_category})")
+
+#             return jsonify({"message": "File uploaded"}), 200
+
+#         return jsonify({"message": "Chunk uploaded"}), 200
+
+#     except Exception as e:
+#         traceback.print_exc()
+#         return jsonify({"error": str(e)}), 500
+
+ 
 @app.route("/collaborator/display/upload-chunk", methods=["POST"])
 def upload_chunk_display():
     try:
         collab_id = session.get("collab_id")
         if not collab_id:
             return jsonify({"error": "Not logged in"}), 401
-
-        file = request.files.get("file")
-        filename = secure_filename(request.form.get("filename", ""))
-        chunk_index = int(request.form.get("chunkIndex", 0))
-        total_chunks = int(request.form.get("totalChunks", 1))
+ 
+        file          = request.files.get("file")
+        filename      = secure_filename(request.form.get("filename", ""))
+        chunk_index   = int(request.form.get("chunkIndex", 0))
+        total_chunks  = int(request.form.get("totalChunks", 1))
         file_category = (request.form.get("fileCategory", "") or "").strip().lower()
-        field_name = request.form.get("fieldName", "")
-
+        field_name    = request.form.get("fieldName", "")
+ 
         if not file or not filename:
             return jsonify({"error": "Missing file data"}), 400
-
-        base_folder = os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "collaborator", collab_id, "display")
+ 
+        base_folder = os.path.join(BASE_DIR, "data", "collaborator", collab_id, "display")
         os.makedirs(base_folder, exist_ok=True)
         temp_dir = os.path.join(base_folder, "temp_chunks")
         os.makedirs(temp_dir, exist_ok=True)
-      
-
-        # Raster rename
+ 
+        # Raster rename map
         raster_map = {
             "precip_raster": "precip_raster.tif",
-            "temp_raster": "temp_raster.tif",
-            "lulc_raster": "lulc_raster.tif",
-            "pop_raster": "pop_raster.tif",
+            "temp_raster":   "temp_raster.tif",
+            "lulc_raster":   "lulc_raster.tif",
+            "pop_raster":    "pop_raster.tif",
         }
-
         if file_category == "raster" and field_name in raster_map:
             filename = raster_map[field_name]
-
+ 
         chunk_path = os.path.join(temp_dir, f"{filename}.part{chunk_index}")
         file.save(chunk_path)
-
+ 
         if chunk_index == total_chunks - 1:
-
             category_to_dir = {
-                "precip": os.path.join(base_folder, "precip"),
-                "temp": os.path.join(base_folder, "temp"),
+                "precip":     os.path.join(base_folder, "precip"),
+                "temp":       os.path.join(base_folder, "temp"),
                 "streamflow": os.path.join(base_folder, "streamflow"),
                 "waterlevel": os.path.join(base_folder, "waterlevel"),
                 "lulc_raster": os.path.join(base_folder, "raster", "lulc"),
-                "pop_raster": os.path.join(base_folder, "raster", "pop"),
-                "raster": os.path.join(base_folder, "raster"),
+                "pop_raster":  os.path.join(base_folder, "raster", "pop"),
+                "raster":      os.path.join(base_folder, "raster"),
             }
             dest_dir = category_to_dir.get(file_category, base_folder)
-
+ 
             base_abs = os.path.abspath(base_folder)
             dest_abs = os.path.abspath(dest_dir)
             if not dest_abs.startswith(base_abs + os.sep) and dest_abs != base_abs:
                 return jsonify({"error": "Invalid upload destination"}), 400
-
+ 
             os.makedirs(dest_dir, exist_ok=True)
             final_path = os.path.join(dest_dir, filename)
-
+ 
             with open(final_path, "wb") as out:
                 for i in range(total_chunks):
                     part = os.path.join(temp_dir, f"{filename}.part{i}")
                     with open(part, "rb") as p:
                         out.write(p.read())
                     os.remove(part)
-
+ 
             print(f"✅ Saved → {final_path} (category={file_category})")
-
             return jsonify({"message": "File uploaded"}), 200
-
+ 
         return jsonify({"message": "Chunk uploaded"}), 200
-
+ 
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+    
+@app.route("/collaborator/display/shp", methods=["POST"])
+def upload_shp_display():
+    try:
+        collab_id = session.get("collab_id")
+        if not collab_id:
+            return jsonify({"error": "Not logged in"}), 401
+ 
+        file = request.files.get("file")
+        if not file:
+            return jsonify({"error": "No file provided"}), 400
+ 
+        # Force the saved filename regardless of what the browser sends
+        saved_name = "narmada_buffer_1000m.shp"
+ 
+        # Validate extension
+        original_name = secure_filename(file.filename or "")
+        if not original_name.lower().endswith(".shp"):
+            return jsonify({"error": "Only .shp files are accepted"}), 400
+ 
+        base_folder = os.path.join(BASE_DIR, "data", "collaborator", collab_id, "display")
+        shp_dir     = os.path.join(base_folder, "shp")
+ 
+        # Path traversal guard
+        base_abs = os.path.abspath(base_folder)
+        shp_abs  = os.path.abspath(shp_dir)
+        if not shp_abs.startswith(base_abs + os.sep) and shp_abs != base_abs:
+            return jsonify({"error": "Invalid upload destination"}), 400
+ 
+        os.makedirs(shp_dir, exist_ok=True)
+        final_path = os.path.join(shp_dir, saved_name)
+        file.save(final_path)
+ 
+        print(f"✅ Shapefile saved → {final_path}")
+        return jsonify({"message": "Shapefile uploaded", "path": final_path}), 200
+ 
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
@@ -1982,7 +1911,7 @@ def upload_chunk_training():
         file_category = request.form.get("fileCategory", "")
         field_name = request.form.get("fieldName", "")
 
-        base_folder = os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "collaborator", collab_id, "gnn", "training_input")
+        base_folder = os.path.join(BASE_DIR, "data", "collaborator", collab_id, "gnn", "training_input")
      
         temp_dir = os.path.join(base_folder, "temp_chunks")
         os.makedirs(temp_dir, exist_ok=True)
@@ -2042,7 +1971,7 @@ def upload_chunk_testing():
         total_chunks = int(request.form.get("totalChunks", 1))
         file_category = request.form.get("fileCategory", "")
 
-        base_folder = os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "collaborator",collab_id, "gnn", "testing_input")
+        base_folder = os.path.join(BASE_DIR, "data", "collaborator",collab_id, "gnn", "testing_input")
 
         temp_dir = os.path.join(base_folder, "temp_chunks")
         os.makedirs(temp_dir, exist_ok=True)
@@ -2133,7 +2062,8 @@ def collaborator_generate_precip_year():
 
         
         raster_path = os.path.join(
-            "https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev",
+            BASE_DIR,
+            "data",
             "collaborator",
             session["collab_id"],
             "display",
@@ -2151,7 +2081,7 @@ def collaborator_generate_precip_year():
       
         return jsonify({
             "message": f"Raster generated for {year}",
-            "file": f"{BASE_URL}/collaborator/{session['collab_id']}/display/precip/output_precip_rasters/precip_{year}_30m.tif"
+            "file": f"data/collaborator/{session["collab_id"]}/display/precip/output_precip_rasters/precip_{year}_30m.tif"
         })
 
     except Exception as e:
@@ -2179,7 +2109,8 @@ def collaborator_generate_temp_year():
 
         
         raster_path = os.path.join(
-            "https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev",
+            BASE_DIR,
+            "data",
             "collaborator",
             session["collab_id"],
             "display",
@@ -2197,7 +2128,7 @@ def collaborator_generate_temp_year():
       
         return jsonify({
             "message": f"Raster generated for {year}",
-            "file": f"{BASE_URL}/collaborator/{session['collab_id']}/display/temp/output_temp_rasters/precip_{year}_30m.tif"
+            "file": f"data/collaborator/{session["collab_id"]}/display/temp/output_temp_rasters/precip_{year}_30m.tif"
         })
 
     except Exception as e:
@@ -2224,7 +2155,8 @@ def collaborator_generate_streamflow_year():
 
         
         raster_path = os.path.join(
-            "https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev",
+            BASE_DIR,
+            "data",
             "collaborator",
             session["collab_id"],
             "display",
@@ -2242,7 +2174,7 @@ def collaborator_generate_streamflow_year():
       
         return jsonify({
             "message": f"Raster generated for {year , month}",
-            "file": f"{BASE_URL}/collaborator/{session['collab_id']}/display/streamflow/output_streamflow_rasters/streamflow_{year}_{month}_30m.tif"
+            "file": f"data/collaborator/{session["collab_id"]}/display/streamflow/output_streamflow_rasters/streamflow_{year}_{month}_30m.tif"
         })
 
     except Exception as e:
@@ -2269,7 +2201,8 @@ def collaborator_generate_waterlevel_year():
 
         
         raster_path = os.path.join(
-            "https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev",
+            BASE_DIR,
+            "data",
             "collaborator",
             session["collab_id"],
             "display",
@@ -2287,7 +2220,7 @@ def collaborator_generate_waterlevel_year():
       
         return jsonify({
             "message": f"Raster generated for {year}",
-            "file": f"{BASE_URL}/collaborator/{session['collab_id']}/display/waterlevel/output_waterlevel_rasters/waterlevel_{year}_{month}_30m.tif"
+            "file": f"data/collaborator/{session["collab_id"]}/display/waterlevel/output_waterlevel_rasters/waterlevel_{year}_{month}_30m.tif"
         })
 
     except Exception as e:
@@ -2299,7 +2232,7 @@ import re
 @app.route("/api/collaborator-get-years/<dataset>")
 def get_years(dataset):
 
-    base_path = os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "collaborator", session["collab_id"], "display")
+    base_path = os.path.join(BASE_DIR, "data", "collaborator", session["collab_id"], "display")
 
     try:
 
@@ -2393,14 +2326,13 @@ def collaborator_raster_range_meta():
         return jsonify({"error": "Unauthorized"}), 401
 
     collab_id = session["collab_id"]
-    raster_dir = os.path.join("https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev", "collaborator", collab_id, "display", "raster")
+    raster_dir = os.path.join(BASE_DIR, "data", "collaborator", collab_id, "display", "raster")
 
     def pick_file(kind):
         if not os.path.exists(raster_dir):
             return None
 
-        range_candidates = []
-        fallback_candidates = []
+        candidates = []
         for fname in os.listdir(raster_dir):
             lower = fname.lower()
             if not lower.endswith(".tif"):
@@ -2417,30 +2349,22 @@ def collaborator_raster_range_meta():
 
             import re
             match = re.match(r"^((?:19|20)\d{2})_((?:19|20)\d{2})_(.+)\.tif$", fname)
-            if match:
-                start_year = int(match.group(1))
-                end_year = int(match.group(2))
-                range_candidates.append((start_year, end_year, fname))
-            else:
-                fallback_candidates.append(fname)
+            if not match:
+                continue
 
-        if range_candidates:
-            start_year, end_year, selected = sorted(range_candidates, key=lambda x: (x[0], x[1]))[-1]
-            return {
-                "file": selected,
-                "startYear": start_year,
-                "endYear": end_year,
-            }
+            start_year = int(match.group(1))
+            end_year = int(match.group(2))
+            candidates.append((start_year, end_year, fname))
 
-        if fallback_candidates:
-            fallback_candidates.sort()
-            return {
-                "file": fallback_candidates[-1],
-                "startYear": None,
-                "endYear": None,
-            }
+        if not candidates:
+            return None
 
-        return None
+        start_year, end_year, selected = sorted(candidates, key=lambda x: (x[0], x[1]))[-1]
+        return {
+            "file": selected,
+            "startYear": start_year,
+            "endYear": end_year,
+        }
 
     return jsonify({
         "precip": pick_file("precip"),

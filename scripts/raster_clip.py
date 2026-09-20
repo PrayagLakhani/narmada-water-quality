@@ -3,16 +3,12 @@ import subprocess
 import tempfile
 
 
-DATA_BASE_URL = os.getenv(
-    "DATA_BASE_URL",
-    "https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev"
-).rstrip("/")
-
-
 def clip_precipitation_raster():
-    input_raster = f"{DATA_BASE_URL}/raster/2011_2023_Precipitation.tif"
-    basin_geojson = f"{DATA_BASE_URL}/geojson/narmada.geojson"
-    output_raster = f"{DATA_BASE_URL}/raster/precip_clipped.tif"
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    input_raster = os.path.join(BASE_DIR, "data", "raster", "2011_2023_Precipitation.tif")
+    basin_geojson = os.path.join(BASE_DIR, "data", "geojson", "narmada.geojson")
+    output_raster = os.path.join(BASE_DIR, "data", "raster", "precip_clipped.tif")
 
     valid_geojson = os.path.join(tempfile.gettempdir(), "narmada_valid.geojson")
 
@@ -26,8 +22,7 @@ def clip_precipitation_raster():
             "gdalwarp",
             "-cutline", valid_geojson,
             "-crop_to_cutline",
-            "-wm", "32",
-            "-wo", "NUM_THREADS=2",
+            "-multi",
             "-of", "GTiff",
             "-co", "TILED=YES",
             "-co", "COMPRESS=DEFLATE",
@@ -43,9 +38,11 @@ def clip_precipitation_raster():
 
 
 def clip_temperature_raster():
-    input_raster = f"{DATA_BASE_URL}/raster/2011_2023_Mean_Temperature.tif"
-    basin_geojson = f"{DATA_BASE_URL}/geojson/narmada.geojson"
-    output_raster = f"{DATA_BASE_URL}/raster/temp_clipped.tif"
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    input_raster = os.path.join(BASE_DIR, "data", "raster", "2011_2023_Mean_Temperature.tif")
+    basin_geojson = os.path.join(BASE_DIR, "data", "geojson", "narmada.geojson")
+    output_raster = os.path.join(BASE_DIR, "data", "raster", "temp_clipped.tif")
 
     valid_geojson = os.path.join(tempfile.gettempdir(), "narmada_valid.geojson")
 
@@ -59,8 +56,7 @@ def clip_temperature_raster():
             "gdalwarp",
             "-cutline", valid_geojson,
             "-crop_to_cutline",
-            "-wm", "32",
-            "-wo", "NUM_THREADS=2",
+            "-multi",
             "-of", "GTiff",
             "-co", "TILED=YES",
             "-co", "COMPRESS=DEFLATE",

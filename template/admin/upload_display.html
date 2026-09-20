@@ -163,11 +163,11 @@ document.getElementById("uploadForm").onsubmit = async (e) => {
         }
 
         status.style.color = "green";
-        status.innerText = "✅ Files uploaded successfully";
+        status.innerText = "Files uploaded successfully";
 
     } catch (err) {
         status.style.color = "red";
-        status.innerText = "❌ " + err.message;
+        status.innerText = err.message;
     }
 };
 
@@ -187,10 +187,10 @@ document.getElementById("clearDirBtn").onclick = async () => {
       if (!res.ok) throw new Error(data.error || "Failed to clear directory");
 
       status.style.color = "green";
-      status.innerText = "✅ Display directory cleared successfully";
+      status.innerText = "Display directory cleared successfully";
     } catch (err) {
       status.style.color = "red";
-      status.innerText = "❌ " + err.message;
+      status.innerText = err.message;
     }
 };
 </script>

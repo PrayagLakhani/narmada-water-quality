@@ -11,15 +11,7 @@ from shapely.geometry import Point
 
 
 MONTH_ORDER = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-DATA_BASE_URL = os.getenv(
-    "DATA_BASE_URL",
-    "https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev"
-).rstrip("/")
 
-
-
-def r2_path(relative_path):
-    return f"{DATA_BASE_URL}/{relative_path.lstrip('/')}"
 
 
 def _normalize_month_column(col_name):
@@ -53,9 +45,8 @@ def _extract_lon_lat_from_filename(filename):
 
 
 def _compute_parameter_means_for_district(base_dir, district_geom):
-    display_dir = f"{DATA_BASE_URL}/admin/display"
-    geojson_url = f"{display_dir}/geojson/district.geojson"
-    if not url_exists(geojson_url):
+    display_dir = os.path.join(base_dir, "data", "admin", "display")
+    if not os.path.exists(display_dir):
         return []
 
     folder_labels = {
@@ -167,6 +158,7 @@ def _compute_parameter_means_for_district(base_dir, district_geom):
 
     return results
 
+
 def mean_two_rasters_for_district_in_narmada(
     district_geojson="district_boundary.geojson",
     narmada_geojson="narmada.geojson",
@@ -174,17 +166,18 @@ def mean_two_rasters_for_district_in_narmada(
     temp_raster="2011_2023_Mean_Temperature.tif"
 ):
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    raster_dir = os.path.join(BASE_DIR, "data", "admin", "display", "raster")
 
     def resolve_raster_path(primary_name, alternatives=None):
         candidates = [primary_name] + (alternatives or [])
         for name in candidates:
-            path = _local_data_file(f"admin/display/raster/{name}")
+            path = os.path.join(raster_dir, name)
             if os.path.exists(path):
                 return path
-        raise FileNotFoundError(f"Raster not available at data server: {candidates}")
+        return os.path.join(raster_dir, primary_name)
 
-    district_geojson = _local_data_file(f"admin/display/geojson/{district_geojson}")
-    narmada_geojson = _local_data_file(f"admin/display/geojson/{narmada_geojson}")
+    district_geojson = os.path.join(BASE_DIR, "data", "admin", "display", "geojson", district_geojson)
+    narmada_geojson = os.path.join(BASE_DIR, "data", "admin", "display", "geojson", narmada_geojson)
     precip_raster = resolve_raster_path(precip_raster)
     temp_raster = resolve_raster_path(temp_raster, ["2011_2023_MEAN_TEMPERATURE.tif"])
 

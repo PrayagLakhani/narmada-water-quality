@@ -1,8 +1,6 @@
-const DATA_BASE_URL = "https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev";
-
 Promise.all([
-  fetch(`${DATA_BASE_URL}/admin/display/geojson/district_boundary.geojson`).then(r => r.json()),
-  fetch(`${DATA_BASE_URL}/admin/display/geojson/narmada_named_network.geojson`).then(r => r.json())
+  fetch("/data/admin/display/geojson/district_boundary.geojson").then(r => r.json()),
+  fetch("/data/admin/display/geojson/narmada_named_network.geojson").then(r => r.json())
 ]).then(([districts, rivers]) => {
 
   const tbody = document.querySelector("#resultTable tbody");

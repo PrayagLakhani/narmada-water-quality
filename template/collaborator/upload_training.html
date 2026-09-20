@@ -213,11 +213,11 @@ document.getElementById("uploadForm").onsubmit = async e => {
     }
 
     progressBr.style.width = "100%";
-    statusEl.innerText = "✅ All files uploaded successfully!";
+    statusEl.innerText = "All files uploaded successfully!";
     window.location.href = "/collaborator/upload/testing";
   } catch (err) {
     console.error(err);
-    statusEl.innerText = "❌ Error: " + err.message;
+    statusEl.innerText = err.message;
     submitBtn.disabled = false;
   }
 };

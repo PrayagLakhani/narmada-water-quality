@@ -1,9 +1,3 @@
-const BASE_URL = "https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev";
-const dataUrl = (path) =>
-  `${BASE_URL}/${String(path).replace(/^\/+/, "")}`;
-
-const API_BASE = "https://narmada-project.onrender.com";
-
 // ================= COLOR CLASSIFICATION =================
 
 // Precipitation breaks (mm) – adjust if needed
@@ -80,49 +74,49 @@ function registerLayer(layer, name, addByDefault = false) {
 }
 
 // ---------- STATE ----------
-fetch(dataUrl("admin/display/geojson/state_boundary.geojson")).then(r => r.json()).then(data => {
+fetch("/data/admin/display/geojson/state_boundary.geojson").then(r => r.json()).then(data => {
   const layer = L.geoJSON(data, { style: { color: "#000", weight: 2, fillOpacity: 0.4 }, onEachFeature: (f, l) => l.bindPopup(popupContent(f.properties)) });
   registerLayer(layer, "State Boundary", true); layer.bringToBack(); map.fitBounds(layer.getBounds());
 });
 
 // ---------- DISTRICT ----------
-fetch(dataUrl("admin/display/geojson/district_boundary.geojson")).then(r => r.json()).then(data => {
+fetch("/data/admin/display/geojson/district_boundary.geojson").then(r => r.json()).then(data => {
   const layer = L.geoJSON(data, { style: { color: "#444", weight: 1, fillOpacity: 0.2 }, onEachFeature: (f, l) => l.bindPopup(popupContent(f.properties)) });
   registerLayer(layer, "District Boundary");
 });
 
 // ---------- NARMADA POLYGON ----------
-fetch(dataUrl("admin/display/geojson/narmada.geojson")).then(r => r.json()).then(data => {
+fetch("/data/admin/display/geojson/narmada.geojson").then(r => r.json()).then(data => {
   const layer = L.geoJSON(data, { style: { color: "blue", fillOpacity: 0.2 }, onEachFeature: (f, l) => l.bindPopup(popupContent(f.properties)) });
   registerLayer(layer, "Narmada Polygon", true); layer.bringToBack();
 });
 
 // ---------- RIVER NETWORK ----------
-fetch(dataUrl("admin/display/geojson/narmada_named_network.geojson")).then(r => r.json()).then(data => {
+fetch("/data/admin/display/geojson/narmada_named_network.geojson").then(r => r.json()).then(data => {
   const layer = L.geoJSON(data, { style: { color: "cyan", weight: 1.5 }, onEachFeature: (f, l) => l.bindPopup(popupContent(f.properties)) });
   registerLayer(layer, "Named River Network", true);
 });
 
 // ---------- CENTERLINE ----------
-fetch(dataUrl("admin/display/geojson/narmada_centerline.geojson")).then(r => r.json()).then(data => {
+fetch("/data/admin/display/geojson/narmada_centerline.geojson").then(r => r.json()).then(data => {
   const layer = L.geoJSON(data, { style: { color: "navy", weight: 3 }, onEachFeature: (f, l) => l.bindPopup(popupContent(f.properties)) });
   registerLayer(layer, "Narmada Centerline", true); layer.bringToFront();
 });
 
 // ---------- STATE HQ ----------
-fetch(dataUrl("admin/display/geojson/state_hq.geojson")).then(r => r.json()).then(data => {
+fetch("/data/admin/display/geojson/state_hq.geojson").then(r => r.json()).then(data => {
   const layer = L.geoJSON(data, { pointToLayer: (f, latlng) => L.circleMarker(latlng, { radius: 6, color: "red", fillOpacity: 1 }), onEachFeature: (f, l) => l.bindPopup(popupContent(f.properties)) });
   registerLayer(layer, "State HQ");
 });
 
 // ---------- DISTRICT HQ ----------
-fetch(dataUrl("admin/display/geojson/district_hq.geojson")).then(r => r.json()).then(data => {
+fetch("/data/admin/display/geojson/district_hq.geojson").then(r => r.json()).then(data => {
   const layer = L.geoJSON(data, { pointToLayer: (f, latlng) => L.circleMarker(latlng, { radius: 4, color: "darkred", fillOpacity: 1 }), onEachFeature: (f, l) => l.bindPopup(popupContent(f.properties)) });
   registerLayer(layer, "District HQ");
 });
 
 // ---------- MAJOR TOWNS ----------
-fetch(dataUrl("admin/display/geojson/major_towns.geojson")).then(r => r.json()).then(data => {
+fetch("/data/admin/display/geojson/major_towns.geojson").then(r => r.json()).then(data => {
   const layer = L.geoJSON(data, { pointToLayer: (f, latlng) => L.circleMarker(latlng, { radius: 3, color: "orange", fillOpacity: 1 }), onEachFeature: (f, l) => l.bindPopup(popupContent(f.properties)) });
   registerLayer(layer, "Major Towns");
 });
@@ -512,12 +506,12 @@ function getRangeLabel(kind) {
 function getRangeFileUrl(kind) {
   const meta = rasterRangeMeta[kind];
   if (!meta || !meta.file) return null;
-  return `admin/display/raster/${meta.file}`;
+  return `/data/admin/display/raster/${meta.file}`;
 }
 
 async function loadAdminRasterRangeMeta() {
   try {
-    const res = await fetch(`${API_BASE}/api/admin-raster-range-meta`);
+    const res = await fetch("/api/admin-raster-range-meta");
     if (!res.ok) return;
 
     const data = await res.json();
@@ -699,10 +693,10 @@ document.addEventListener("click", async function (e) {
   // ================= CLIP PRECIP =================
   if (e.target.id === "clipPrecipBtn") {
     removeAllRasters(); 
-    const r = await fetch(`${API_BASE}/api/admin-clip-precip`);
+    const r = await fetch("/api/admin-clip-precip");
     if (!r.ok) return alert("Error");
 
-    const t = await fetch(`${dataUrl}admin/display/raster/precip_clipped.tif?ts=${Date.now()}`);
+    const t = await fetch("/data/admin/display/raster/precip_clipped.tif?ts=" + Date.now());
     const b = await t.arrayBuffer();
     const g = await parseGeoraster(b);
 
@@ -742,10 +736,10 @@ document.addEventListener("click", async function (e) {
   // ================= CLIP TEMP =================
   else if (e.target.id === "clipTempBtn") {
     removeAllRasters();
-    const r = await fetch(`${API_BASE}/api/admin-clip-temperature`);
+    const r = await fetch("/api/admin-clip-temperature");
     if (!r.ok) return alert("Error");
 
-    const t = await fetch(`${dataUrl}admin/display/raster/temp_clipped.tif?ts=${Date.now()}`);
+    const t = await fetch("/data/admin/display/raster/temp_clipped.tif?ts=" + Date.now());
     const b = await t.arrayBuffer();
     const g = await parseGeoraster(b);
 
@@ -792,7 +786,7 @@ document.addEventListener("click", async function (e) {
       }
       
       if (!fullPrecipLayer) {
-        const r = await fetch(dataUrl(precipUrl) + `?ts=${Date.now()}`);
+        const r = await fetch(`${precipUrl}?ts=${Date.now()}`);
         const b = await r.arrayBuffer();
         const g = await parseGeoraster(b);
 
@@ -820,10 +814,10 @@ document.addEventListener("click", async function (e) {
       const tempUrl = getRangeFileUrl("temp");
       if (!tempUrl) {
         e.target.checked = false;
-        return alert("Temperature full raster not found in admin/display/raster");
+        return alert("Temperature full raster not found in data/admin/display/raster");
       }
       if (!fullTempLayer) {
-        const r = await fetch(dataUrl(tempUrl) + `?ts=${Date.now()}`);
+        const r = await fetch(`${tempUrl}?ts=${Date.now()}`);
         const b = await r.arrayBuffer();
         const g = await parseGeoraster(b);
 
@@ -849,9 +843,9 @@ document.addEventListener("click", async function (e) {
     const year = document.getElementById("precipYear").value;
     if (!year) return alert("Select year");
 
-    await fetch(`${API_BASE}/api/admin-generate-precip-year?year=${year}`);
+    await fetch(`/api/admin-generate-precip-year?year=${year}`);
 
-    const t = await fetch(`${dataUrl}admin/display/precip/output_precip_rasters/precip_${year}_30m.tif?ts=${Date.now()}`);
+    const t = await fetch(`/data/admin/display/precip/output_precip_rasters/precip_${year}_30m.tif?ts=${Date.now()}`);
     const b = await t.arrayBuffer();
     const g = await parseGeoraster(b);
 
@@ -902,9 +896,9 @@ document.addEventListener("click", async function (e) {
     const year = document.getElementById("tempYear").value;
     if (!year) return alert("Select year");
 
-    await fetch(`${API_BASE}/api/admin-generate-temp-year?year=${year}`);
+    await fetch(`/api/admin-generate-temp-year?year=${year}`);
 
-    const t = await fetch(`${dataUrl}admin/display/temp/output_temp_rasters/temp_${year}_30m.tif?ts=${Date.now()}`);
+    const t = await fetch(`/data/admin/display/temp/output_temp_rasters/temp_${year}_30m.tif?ts=${Date.now()}`);
     const b = await t.arrayBuffer();
     const g = await parseGeoraster(b);
 
@@ -940,7 +934,7 @@ document.addEventListener("click", async function (e) {
     const year = document.getElementById("LulcYear").value;
     if (!year) return alert("Select year");
 
-    const t = await fetch(`${dataUrl}admin/display/raster/lulc/lulc_${year}.tif?ts=${Date.now()}`);
+    const t = await fetch(`/data/admin/display/raster/lulc/lulc_${year}.tif?ts=${Date.now()}`);
     const b = await t.arrayBuffer();
     const g = await parseGeoraster(b);
     const min = g.mins[0];
@@ -989,7 +983,7 @@ document.addEventListener("click", async function (e) {
     const year = document.getElementById("PopYear").value;
     if (!year) return alert("Select year");
 
-    const t = await fetch(`${dataUrl}admin/display/raster/pop/pop_${year}.tif?ts=${Date.now()}`);
+    const t = await fetch(`/data/admin/display/raster/pop/pop_${year}.tif?ts=${Date.now()}`);
     const b = await t.arrayBuffer();
     const g = await parseGeoraster(b);
     const min = g.mins[0];
@@ -1039,9 +1033,9 @@ document.addEventListener("click", async function (e) {
     const month = document.getElementById("StreamFlowMonth").value;
     if (!year) return alert("Select year");
 
-    await fetch(`${API_BASE}/api/admin-generate-streamflow-year?year=${year}&month=${month}`);
+    await fetch(`/api/admin-generate-streamflow-year?year=${year}&month=${month}`);
 
-    const t = await fetch(`${dataUrl}admin/display/streamflow/output_streamflow_rasters/streamflow_${year}_${month}_30m.tif?ts=${Date.now()}`);
+    const t = await fetch(`/data/admin/display/streamflow/output_streamflow_rasters/streamflow_${year}_${month}_30m.tif?ts=${Date.now()}`);
     const b = await t.arrayBuffer();
     const g = await parseGeoraster(b);
 
@@ -1093,9 +1087,9 @@ document.addEventListener("click", async function (e) {
     const month = document.getElementById("WaterLevelMonth").value;
     if (!year) return alert("Select year");
 
-    await fetch(`${API_BASE}/api/admin-generate-waterlevel-year?year=${year}&month=${month}`);
+    await fetch(`/api/admin-generate-waterlevel-year?year=${year}&month=${month}`);
 
-    const t = await fetch(`${dataUrl}admin/display/waterlevel/output_waterlevel_rasters/waterlevel_${year}_${month}_30m.tif?ts=${Date.now()}`);
+    const t = await fetch(`/data/admin/display/waterlevel/output_waterlevel_rasters/waterlevel_${year}_${month}_30m.tif?ts=${Date.now()}`);
     const b = await t.arrayBuffer();
     const g = await parseGeoraster(b);
     const min = g.mins[0];
@@ -1176,7 +1170,7 @@ async function populateYearsDynamic(selectId, dataset) {
   if (!select) return;
 
   try {
-    const res = await fetch(`${API_BASE}/api/admin-get-years/${dataset}`);
+    const res = await fetch(`/api/admin-get-years/${dataset}`);
     const years = await res.json();
 
     select.innerHTML = ""; // clear old
@@ -1221,7 +1215,7 @@ function populateMonths(id) {
 
   months.forEach(m => {
     const opt = document.createElement("option");
-    opt.value = m.value;
+    opt.value = m.name;
     opt.textContent = m.name;
     select.appendChild(opt);
   });

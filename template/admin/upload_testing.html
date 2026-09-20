@@ -102,7 +102,7 @@ document.getElementById("uploadForm").onsubmit = async (e) => {
     await uploadFiles(popFiles, "pop");
 
     status.style.color = "green";
-    status.innerText = "✅ All files uploaded successfully. Processing...";
+    status.innerText = "All files uploaded successfully. Processing...";
 
     const runRes = await fetch("/run", {
       method: "POST"
@@ -132,7 +132,7 @@ document.getElementById("uploadForm").onsubmit = async (e) => {
 
   } catch (err) {
     status.style.color = "red";
-    status.innerText = "❌ " + err.message;
+    status.innerText = err.message;
   }
 };
 
@@ -152,10 +152,10 @@ document.getElementById("clearDirBtn").onclick = async () => {
     if (!res.ok) throw new Error(data.error || "Failed to clear directory");
 
     status.style.color = "green";
-    status.innerText = "✅ Testing directory cleared successfully";
+    status.innerText = "Testing directory cleared successfully";
   } catch (err) {
     status.style.color = "red";
-    status.innerText = "❌ " + err.message;
+    status.innerText = err.message;
   }
 };
 </script>

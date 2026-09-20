@@ -26,7 +26,7 @@
   <!-- MENU -->
   <div class="menu" id="menu">
     <a href="/template/viewer/rivers.html">River Tributaries per District</a>
-    <a href="/template/viewer/district_climate.html">Mean Precipitaion & Temperature per District</a>
+    <a href="/template/viewer/district_climate.html">Parameters Mean Value per District</a>
     <a href="/admin/modelling">Modelling</a>
     <a href="/admin/logout">LogOut</a>
   </div>
@@ -40,5 +40,11 @@
 <script src="https://unpkg.com/georaster-layer-for-leaflet"></script>
 
 <script src="/static/js/admin_index.js"></script>
+
+<script>function toggleMenu() {
+  const menu = document.getElementById("menu");
+  menu.style.display = (menu.style.display === "block") ? "none" : "block";
+  updateZoomPosition();
+}</script>
 
 

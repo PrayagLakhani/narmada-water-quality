@@ -97,3 +97,32 @@ footer {
   font-size: 0.85rem;
   color: #777;
 }
+
+/* ── Layout ───────────────────────────────────── */
+.result-wrap        { padding: 1rem 0; }
+.district-heading   { font-size: 18px; font-weight: 500; margin: 0 0 1rem; }
+.params-grid        { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+
+/* ── Param card ───────────────────────────────── */
+.param-card         { background: var(--bg-primary, #fff); border: 0.5px solid #ddd; border-radius: 12px; padding: 1rem 1.25rem; }
+.param-label        { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 4px; }
+.param-value        { font-size: 22px; font-weight: 500; margin: 0; line-height: 1.2; }
+.param-unit         { font-size: 13px; font-weight: 400; color: #888; margin-left: 3px; }
+.param-meta         { margin-top: 10px; padding-top: 10px; border-top: 0.5px solid #eee; font-size: 12px; color: #888; display: flex; flex-direction: column; gap: 3px; }
+.param-meta span    { display: flex; justify-content: space-between; }
+.param-meta b       { color: #222; font-weight: 500; }
+
+/* ── Badges ───────────────────────────────────── */
+.badge              { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 6px; margin-top: 8px; }
+.badge-blue         { background: #E6F1FB; color: #0C447C; }
+.badge-amber        { background: #FAEEDA; color: #633806; }
+.badge-teal         { background: #E1F5EE; color: #085041; }
+.badge-green        { background: #EAF3DE; color: #27500A; }
+.badge-gray         { background: #f1f1f1;  color: #555; }
+
+/* ── Raster section ───────────────────────────── */
+.raster-section     { margin-top: 1.5rem; }
+.raster-heading     { font-size: 12px; font-weight: 500; color: #888; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 8px; }
+.raster-grid        { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.raster-card        { background: #f7f7f5; border-radius: 8px; padding: 0.75rem 1rem; }
+.no-data            { color: #aaa; font-size: 13px; font-style: italic; }

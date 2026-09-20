@@ -292,10 +292,10 @@
         const legend = L.control({ position: "bottomright" });
         legend.onAdd = function () {
     const div = L.DomUtil.create("div", "wqi-legend");
-    div.innerHTML = "<b>WQI Ratio</b><br>"
-        + "<div><span class='swatch' style='background:#d73027'></span>Low (&lt; 0.5)</div>"
-        + "<div><span class='swatch' style='background:#fdae61'></span>Medium (0.5 - 0.75)</div>"
-        + "<div><span class='swatch' style='background:#1a9850'></span>High (&gt; 0.75)</div>";
+    div.innerHTML = "<b>WQI Classification Legend</b><br>"
+        + "<div><span class='swatch' style='background:#1a9850'></span>(&lt; 50) Less Polluted (Excellent/Good)</div>"
+        + "<div><span class='swatch' style='background:#fdae61'></span>(50 - 75) Moderately Polluted (Fair/Medium)</div>"
+        + "<div><span class='swatch' style='background:#d73027'></span>(&gt; 75) Highly Polluted (Poor/Hazardous)</div>";
     return div;
 };
 legend.addTo(map);
@@ -303,16 +303,13 @@ legend.addTo(map);
         function getWqiColorByRatio(ratio) {
     if (ratio === null || ratio === undefined || Number.isNaN(ratio)) return null;
 
-    if (ratio < 0.5) return "#d73027";     // Low (reddish)
+    if (ratio < 0.5) return "#1a9850";     // Low (reddish)
     if (ratio <= 0.75) return "#fdae61";   // Medium (orange)
-    return "#1a9850";                     // High (green)
+    return "#d73027";                     // High (green)
 }
 
-        const DATA_BASE_URL = "https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev";
-        const dataUrl = (path) => `${DATA_BASE_URL}/${String(path).replace(/^\/+/, "")}`;
-
         async function loadStateBoundary() {
-            const res = await fetch(dataUrl("admin/display/geojson/state_boundary.geojson"));
+            const res = await fetch("/data/admin/display/geojson/state_boundary.geojson");
             if (!res.ok) throw new Error("Failed to load state boundary");
             const geojson = await res.json();
 
@@ -324,7 +321,7 @@ legend.addTo(map);
         }
 
         async function loadDistrictBoundary() {
-            const res = await fetch(dataUrl("admin/display/geojson/district_boundary.geojson"));
+            const res = await fetch("/data/admin/display/geojson/district_boundary.geojson");
             if (!res.ok) throw new Error("Failed to load district boundary");
             const geojson = await res.json();
 
@@ -425,16 +422,16 @@ legend.addTo(map);
             populateMonths(data.years[data.years.length - 1]);
             yearSelect.value = String(data.years[data.years.length - 1]);
 
-            yearSelect.addEventListener("change", () => {
-                populateMonths(yearSelect.value);
-                clearExistingRasterLayers();
-                setStatus("Select month and click Load Raster");
-            });
+            // yearSelect.addEventListener("change", () => {
+            //     populateMonths(yearSelect.value);
+            //     clearExistingRasterLayers();
+            //     setStatus("Select month and click Load Raster");
+            // });
 
-            monthSelect.addEventListener("change", () => {
-                clearExistingRasterLayers();
-                setStatus("Click Load Raster to view selected month");
-            });
+            // monthSelect.addEventListener("change", () => {
+            //     clearExistingRasterLayers();
+            //     setStatus("Click Load Raster to view selected month");
+            // });
 
             setStatus("");
         }
@@ -451,7 +448,7 @@ legend.addTo(map);
             }
 
             const selectedFile = `wqi_${year}_${month}.tif`;
-            const selectedUrl = dataUrl(`/admin/gnn/wqi_rasters/${selectedFile}`);
+            const selectedUrl = `/data/admin/gnn/wqi_rasters/${selectedFile}`;
            
 
             const response = await fetch(selectedUrl + "?ts=" + Date.now());

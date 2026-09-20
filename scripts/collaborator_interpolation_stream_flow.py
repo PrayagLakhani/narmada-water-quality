@@ -21,19 +21,15 @@ collab_id=(sys.argv[3])
 # =====================================================
 # PATHS
 # =====================================================
-DATA_BASE_URL = os.getenv(
-    "DATA_BASE_URL",
-    "https://pub-7c568aa6f5ec40dbac09e26180370bdd.r2.dev"
-).rstrip("/")
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-csv_dir = f"{DATA_BASE_URL}/collaborator/{collab_id}/display/streamflow"
-
+csv_folder = os.path.join(BASE_DIR, "data","collaborator", collab_id, "display", "streamflow")
 buffer_candidates = [
-    f"{DATA_BASE_URL}/collaborator/{collab_id}/display/shp/narmada_buffer_1000m.shp",
-    f"{DATA_BASE_URL}/admin/display/shp/narmada_buffer_1000m.shp",
+    os.path.join(BASE_DIR, "data", "collaborator", collab_id, "display", "shp", "narmada_buffer_1000m.shp"),
+    os.path.join(BASE_DIR, "data", "admin", "display", "shp", "narmada_buffer_1000m.shp"),
 ]
-
-output_folder = f"{DATA_BASE_URL}/collaborator/{collab_id}/display/streamflow/output_streamflow_rasters"
+buffer_shp = next((path for path in buffer_candidates if os.path.exists(path)), None)
+output_folder = os.path.join(BASE_DIR, "data","collaborator", collab_id, "display", "streamflow", "output_streamflow_rasters")
 
 year_input = int(sys.argv[1])
 input_month=(sys.argv[2])
@@ -45,30 +41,23 @@ power = 2
 
 os.makedirs(output_folder, exist_ok=True)
 
-
-def _local_buffer_shapefile():
-    for candidate in buffer_candidates:
-        if os.path.exists(candidate):
-            return candidate
-    raise FileNotFoundError("Required buffer shapefile not found in local data folders")
-
 # =====================================================
 # STEP 1: READ ALL CSV FILES
 # =====================================================
 print("Reading streamflow CSV files...")
 
-csv_files = sorted([f for f in os.listdir(csv_dir) if f.lower().endswith(".csv")])
+all_files = [os.path.join(csv_folder, f) for f in os.listdir(csv_folder) if f.endswith(".csv")]
 
-if len(csv_files) == 0:
-    print("No CSV files found")
+if len(all_files) == 0:
+    print("❌ No CSV files found")
     exit()
 
 df_list = []
 skipped_files = []
 
-for csv_name in csv_files:
+for file in all_files:
     # Extract lon/lat from filename tail: ..._<lon>_<lat>.csv
-    filename = os.path.basename(csv_name)
+    filename = os.path.basename(file)
     stem = filename.replace(".csv", "")
     match = re.search(r"(-?\d+(?:\.\d+)?)_(-?\d+(?:\.\d+)?)$", stem)
 
@@ -83,7 +72,7 @@ for csv_name in csv_files:
         skipped_files.append(f"{filename} (invalid lon/lat range)")
         continue
 
-    temp_df = pd.read_csv(os.path.join(csv_dir, filename))
+    temp_df = pd.read_csv(file)
 
     if "Year" not in temp_df.columns:
         skipped_files.append(f"{filename} (missing Year column)")
@@ -107,13 +96,13 @@ if skipped_files:
         print(f"  - {item}")
 
 if len(df_list) == 0:
-    print("No valid station CSV files found after filtering")
+    print("❌ No valid station CSV files found after filtering")
     exit(1)
 
 # Combine all stations
 df = pd.concat(df_list, ignore_index=True)
 
-print("Total records:", len(df))
+print("✅ Total records:", len(df))
 
 # Clean
 df.columns = df.columns.str.strip()
@@ -134,8 +123,15 @@ gdf = gpd.GeoDataFrame(
 # STEP 3: BUFFER
 # =====================================================
 print("Reading buffer shapefile...")
-buffer_shp = _local_buffer_shapefile()
-print(f"Using local buffer shapefile: {buffer_shp}")
+
+if buffer_shp is None:
+    print("❌ Buffer shapefile not found. Checked:")
+    for path in buffer_candidates:
+        print(f"  - {path}")
+    sys.exit(1)
+
+print(f"Using buffer shapefile: {buffer_shp}")
+
 buffer = gpd.read_file(buffer_shp).to_crs(gdf.crs)
 
 # IMPORTANT: don't double buffer
@@ -259,4 +255,4 @@ for year in range(start_year, end_year + 1):
 
         print("  ✔ Saved:", out_path)
 
-print("\n FINAL SUCCESS: Streamflow IDW rasters created!")
+print("\n✅ FINAL SUCCESS: Streamflow IDW rasters created!")

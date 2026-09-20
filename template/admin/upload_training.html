@@ -138,11 +138,11 @@ document.getElementById("uploadForm").onsubmit = async (e) => {
         await uploadRasterFiles(popFiles, "pop");
 
         status.style.color = "green";
-        status.innerText = "✅ Updated and uploaded successfully";
+        status.innerText = "Updated and uploaded successfully";
 
     } catch (err) {
         status.style.color = "red";
-        status.innerText = "❌ " + err.message;
+        status.innerText = err.message;
     }
 };
 
@@ -162,10 +162,10 @@ document.getElementById("clearDirBtn").onclick = async () => {
       if (!res.ok) throw new Error(data.error || "Failed to clear directory");
 
       status.style.color = "green";
-      status.innerText = "✅ Training directory cleared successfully";
+      status.innerText = "Training directory cleared successfully";
     } catch (err) {
       status.style.color = "red";
-      status.innerText = "❌ " + err.message;
+      status.innerText = err.message;
     }
 };
 </script>

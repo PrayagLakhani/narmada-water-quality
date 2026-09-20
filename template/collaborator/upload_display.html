@@ -17,7 +17,6 @@
       font-size: 0.875rem;
       color: #6b7280;
     }
-
     #uploadForm input[type="file"]::file-selector-button {
       margin-right: 0.75rem;
       padding: 0.5rem 1rem;
@@ -30,7 +29,6 @@
       cursor: pointer;
       transition: background-color 0.2s;
     }
-
     #uploadForm input[type="file"]::file-selector-button:hover {
       background: #e0e7ff;
     }
@@ -38,24 +36,23 @@
 </head>
 <body class="bg-gray-50 flex flex-col min-h-screen font-sans antialiased text-gray-800 relative overflow-hidden">
 
-  <!-- Background decorations (matched to login pages) -->
   <div class="fixed inset-0 bg-gradient-to-br from-brand-700 to-brand-400 z-0"></div>
   <div class="absolute top-10 left-10 w-64 h-64 bg-white opacity-10 mix-blend-overlay rounded-full z-0"></div>
   <div class="absolute top-40 right-20 w-80 h-80 bg-brand-900 opacity-20 mix-blend-overlay rounded-full z-0"></div>
 
-  <!-- Navbar layered over background -->
   <div class="w-full flex justify-between items-center p-6 z-10 relative">
     <h1 class="text-white font-bold text-xl tracking-wide">Collaborator Portal</h1>
     <a href="/collaborator/home" class="text-white hover:text-gray-200 text-sm font-medium transition-colors flex items-center justify-center gap-1">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+      </svg>
       Back to Dashboard
     </a>
   </div>
 
-  <!-- Main Login-style Form Card -->
   <div class="flex-grow flex items-center justify-center p-4 z-10 relative">
     <div class="w-full max-w-4xl bg-white rounded-2xl shadow-2xl border border-gray-100 p-8 max-h-[calc(100vh-7rem)] overflow-y-auto">
-      
+
       <div class="text-center mb-8">
         <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-indigo-50 text-indigo-700 mb-4 shadow-sm flex-shrink-0">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -68,59 +65,131 @@
       </div>
 
       <form id="uploadForm" class="space-y-5">
+
+        <!-- GeoJSON -->
         <h4 class="text-brand-700 font-semibold border-b border-gray-200 pb-1">GeoJSON Files (.geojson)</h4>
-        
-        <label class="block text-sm font-medium text-gray-700">River Polygon<input type="file" name="narmada_polygon" accept=".geojson,.json" class="mt-1 block w-full text-sm text-gray-600"></label>
-        <label class="block text-sm font-medium text-gray-700">River Centerline<input type="file" name="narmada_centerline" accept=".geojson,.json" class="mt-1 block w-full text-sm text-gray-600"></label>
-        <label class="block text-sm font-medium text-gray-700">Named River Network<input type="file" name="narmada_named_network" accept=".geojson,.json" class="mt-1 block w-full text-sm text-gray-600"></label>
+        <label class="block text-sm font-medium text-gray-700">River Polygon
+          <input type="file" name="narmada_polygon" accept=".geojson,.json">
+        </label>
+        <label class="block text-sm font-medium text-gray-700">River Centerline
+          <input type="file" name="narmada_centerline" accept=".geojson,.json">
+        </label>
+        <label class="block text-sm font-medium text-gray-700">Named River Network
+          <input type="file" name="narmada_named_network" accept=".geojson,.json">
+        </label>
 
+        <!-- Shapefile -->
+        <h4 class="text-brand-700 font-semibold border-b border-gray-200 pb-1">Shapefile (.shp)</h4>
+        <label class="block text-sm font-medium text-gray-700">
+          Narmada Buffer 1000 m
+          <span class="ml-1 text-xs text-gray-400">(saved as <code class="bg-gray-100 px-1 rounded">narmada_buffer_1000m.shp</code>)</span>
+          <input type="file" name="narmada_buffer_1000m" accept=".shp">
+        </label>
+
+        <!-- Rasters -->
         <h4 class="text-brand-700 font-semibold border-b border-gray-200 pb-1">Raster Files (.tif)</h4>
-        <label class="block text-sm font-medium text-gray-700">Cumulative Precipitation Raster<input type="file" name="precip_raster" accept=".tif,.tiff" class="mt-1 block w-full text-sm text-gray-600"></label>
-        <label class="block text-sm font-medium text-gray-700">Cumulative Temperature Raster<input type="file" name="temp_raster" accept=".tif,.tiff" class="mt-1 block w-full text-sm text-gray-600"></label>
-        <label class="block text-sm font-medium text-gray-700">LULC Rasters Folder<input type="file" name="lulc" webkitdirectory directory multiple class="mt-1 block w-full text-sm text-gray-600"></label>
-        <label class="block text-sm font-medium text-gray-700">Population Density Rasters Folder<input type="file" name="pop" webkitdirectory directory multiple class="mt-1 block w-full text-sm text-gray-600"></label>
+        <label class="block text-sm font-medium text-gray-700">Cumulative Precipitation Raster
+          <input type="file" name="precip_raster" accept=".tif,.tiff">
+        </label>
+        <label class="block text-sm font-medium text-gray-700">Cumulative Temperature Raster
+          <input type="file" name="temp_raster" accept=".tif,.tiff">
+        </label>
+        <label class="block text-sm font-medium text-gray-700">LULC Rasters Folder
+          <input type="file" name="lulc" webkitdirectory directory multiple>
+        </label>
+        <label class="block text-sm font-medium text-gray-700">Population Density Rasters Folder
+          <input type="file" name="pop" webkitdirectory directory multiple>
+        </label>
 
+        <!-- CSVs -->
         <h4 class="text-brand-700 font-semibold border-b border-gray-200 pb-1">CSV Folders (Year-wise Data)</h4>
-        <label class="block text-sm font-medium text-gray-700">Precipitation CSV Folder<input type="file" name="precip" webkitdirectory directory multiple class="mt-1 block w-full text-sm text-gray-600"></label>
-        <label class="block text-sm font-medium text-gray-700">Temperature CSV Folder<input type="file" name="temp" webkitdirectory directory multiple class="mt-1 block w-full text-sm text-gray-600"></label>
-        <label class="block text-sm font-medium text-gray-700">StreamFlow CSV Folder<input type="file" name="streamflow" webkitdirectory directory multiple class="mt-1 block w-full text-sm text-gray-600"></label>
-        <label class="block text-sm font-medium text-gray-700">WaterLevel CSV Folder<input type="file" name="waterlevel" webkitdirectory directory multiple class="mt-1 block w-full text-sm text-gray-600"></label>
+        <label class="block text-sm font-medium text-gray-700">Precipitation CSV Folder
+          <input type="file" name="precip" webkitdirectory directory multiple>
+        </label>
+        <label class="block text-sm font-medium text-gray-700">Temperature CSV Folder
+          <input type="file" name="temp" webkitdirectory directory multiple>
+        </label>
+        <label class="block text-sm font-medium text-gray-700">StreamFlow CSV Folder
+          <input type="file" name="streamflow" webkitdirectory directory multiple>
+        </label>
+        <label class="block text-sm font-medium text-gray-700">WaterLevel CSV Folder
+          <input type="file" name="waterlevel" webkitdirectory directory multiple>
+        </label>
 
         <div class="grid grid-cols-1 sm:grid-cols-10 gap-3 mt-2">
-          <button type="button" onclick="confirmClear()" class="sm:col-span-3 w-full py-2.5 px-4 rounded-lg text-sm font-semibold text-white bg-red-600 hover:bg-red-700 transition-colors">Clear Data</button>
-          <button type="submit" id="submitBtn" class="sm:col-span-7 w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-md text-sm font-medium text-white bg-brand-700 hover:bg-brand-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-700 transition-colors">Upload All Layers</button>
+          <button type="button" onclick="confirmClear()"
+            class="sm:col-span-3 w-full py-2.5 px-4 rounded-lg text-sm font-semibold text-white bg-red-600 hover:bg-red-700 transition-colors">
+            Clear Data
+          </button>
+          <button type="submit" id="submitBtn"
+            class="sm:col-span-7 w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-md text-sm font-medium text-white bg-brand-700 hover:bg-brand-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-700 transition-colors">
+            Upload All Layers
+          </button>
         </div>
 
         <div id="progressWrapper" class="hidden w-full bg-gray-200 rounded overflow-hidden">
-          <div id="progressBar" class="w-0 h-5 bg-green-500 transition-all"></div>
+          <div id="progressBar" class="w-0 h-5 bg-green-500 transition-all duration-300"></div>
         </div>
       </form>
 
       <p id="status" class="mt-6 text-sm font-medium text-center"></p>
-
     </div>
   </div>
 
 <script>
-async function confirmClear() {
-  if (confirm("Are you sure you want to delete all files? This cannot be undone.")) {
-    try {
-      const res = await fetch("/collaborator/clear/display", {
-        method: "POST"
-      });
+// ── Helpers ────────────────────────────────────────────────────────────────
 
-      if (res.ok) {
-        alert("Directory cleared successfully!");
-        location.reload();
-      } else {
-        alert("Failed to clear directory.");
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Something went wrong.");
+// Safely parse error responses — backend may return HTML on 404/500
+async function safeJson(res) {
+  const text = await res.text();
+  try { return JSON.parse(text); }
+  catch { return { error: `Server error ${res.status}: ${text.slice(0, 200)}` }; }
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function logout() { localStorage.clear(); window.location.href = "/login"; }
+
+// ── Clear ──────────────────────────────────────────────────────────────────
+
+async function confirmClear() {
+  if (!confirm("Are you sure you want to delete all files? This cannot be undone.")) return;
+  try {
+    const res = await fetch("/collaborator/clear/display", { method: "POST" });
+    if (res.ok) { alert("Directory cleared successfully!"); location.reload(); }
+    else { alert("Failed to clear directory."); }
+  } catch (err) { console.error(err); alert("Something went wrong."); }
+}
+
+// ── Chunk uploader ─────────────────────────────────────────────────────────
+
+async function uploadInChunks(file, statusEl, progressEl, current, total, label, category) {
+  const CHUNK = 5 * 1024 * 1024;
+  const totalChunks = Math.ceil(file.size / CHUNK);
+
+  for (let i = 0; i < totalChunks; i++) {
+    const start = i * CHUNK;
+    const end   = Math.min(start + CHUNK, file.size);
+    const data  = new FormData();
+    data.append("file",         file.slice(start, end));
+    data.append("filename",     file.name);
+    data.append("chunkIndex",   i);
+    data.append("totalChunks",  totalChunks);
+    data.append("fileCategory", category);
+    data.append("fieldName",    file.fieldName || "");
+
+    statusEl.innerText = `Uploading ${label} ${current}/${total} — ${file.name} (chunk ${i + 1}/${totalChunks})`;
+
+    const res = await fetch("/collaborator/display/upload-chunk", { method: "POST", body: data });
+    if (!res.ok) {
+      const err = await safeJson(res);
+      throw new Error(err.error || `Chunk ${i + 1} failed for ${file.name}`);
     }
+    progressEl.style.width = `${((i + 1) / totalChunks) * 100}%`;
   }
 }
+
+// ── Submit ─────────────────────────────────────────────────────────────────
 
 const geojsonNames = [
   "state_boundary", "district_boundary", "state_hq", "district_hq",
@@ -130,38 +199,44 @@ const geojsonNames = [
 document.getElementById("uploadForm").onsubmit = async e => {
   e.preventDefault();
 
-  const statusEl = document.getElementById("status");
+  const statusEl   = document.getElementById("status");
   const progressWr = document.getElementById("progressWrapper");
   const progressBr = document.getElementById("progressBar");
-  const submitBtn = document.getElementById("submitBtn");
+  const submitBtn  = document.getElementById("submitBtn");
 
   submitBtn.disabled = true;
   statusEl.innerText = "Preparing uploads...";
   progressWr.classList.remove("hidden");
   progressBr.style.width = "0%";
 
-  const geoJsonData = new FormData();
-
-  const rasterFiles = [];
-  const lulcrasterFiles = [];
-  const poprasterFiles = [];
-  const precipCsvFiles = [];
-  const tempCsvFiles = [];
-  const StreamFlowCsvFiles = [];
-  const WaterLevelCsvFiles = [];
-  let hasGeojson = false;
+  const geoJsonData        = new FormData();
+  const rasterFiles        = [];
+  const lulcrasterFiles    = [];
+  const poprasterFiles     = [];
+  const precipCsvFiles     = [];
+  const tempCsvFiles       = [];
+  const streamFlowCsvFiles = [];
+  const waterLevelCsvFiles = [];
+  let   hasGeojson         = false;
+  let   shpFile            = null;
 
   e.target.querySelectorAll('input[type="file"]').forEach(input => {
     if (!input.files.length) return;
+
+    // Shapefile — dedicated handling
+    if (input.name === "narmada_buffer_1000m") {
+      shpFile = input.files[0];
+      return;
+    }
 
     if (input.name === "precip") {
       Array.from(input.files).forEach(f => { if (f.name.endsWith(".csv")) precipCsvFiles.push(f); });
     } else if (input.name === "temp") {
       Array.from(input.files).forEach(f => { if (f.name.endsWith(".csv") || f.name.toLowerCase().endsWith(".xlsx")) tempCsvFiles.push(f); });
     } else if (input.name === "streamflow") {
-      Array.from(input.files).forEach(f => { if (f.name.endsWith(".csv") || f.name.toLowerCase().endsWith(".xlsx")) StreamFlowCsvFiles.push(f); });
+      Array.from(input.files).forEach(f => { if (f.name.endsWith(".csv") || f.name.toLowerCase().endsWith(".xlsx")) streamFlowCsvFiles.push(f); });
     } else if (input.name === "waterlevel") {
-      Array.from(input.files).forEach(f => { if (f.name.endsWith(".csv") || f.name.toLowerCase().endsWith(".xlsx")) WaterLevelCsvFiles.push(f); });
+      Array.from(input.files).forEach(f => { if (f.name.endsWith(".csv") || f.name.toLowerCase().endsWith(".xlsx")) waterLevelCsvFiles.push(f); });
     } else if (input.name === "lulc") {
       Array.from(input.files).forEach(f => { if (f.name.endsWith(".tif") || f.name.toLowerCase().endsWith(".tiff")) lulcrasterFiles.push(f); });
     } else if (input.name === "pop") {
@@ -177,84 +252,65 @@ document.getElementById("uploadForm").onsubmit = async e => {
   });
 
   try {
+    // Step 1 — GeoJSON
     if (hasGeojson) {
-      statusEl.innerText = "Step 1/4: Uploading GeoJSON layers...";
+      statusEl.innerText = "Step 1: Uploading GeoJSON layers...";
       const res = await fetch("/collaborator/display/upload-all", { method: "POST", body: geoJsonData });
-      if (!res.ok) { const err = await res.json(); throw new Error(err.error || "GeoJSON upload failed"); }
+      if (!res.ok) { const err = await safeJson(res); throw new Error(err.error || "GeoJSON upload failed"); }
     }
 
+    // Step 2 — Shapefile → /collaborator/display/shp, saved as narmada_buffer_1000m.shp
+    if (shpFile) {
+      statusEl.innerText = "Step 2: Uploading Shapefile (narmada_buffer_1000m.shp)...";
+      const shpData = new FormData();
+      shpData.append("file", shpFile, "narmada_buffer_1000m.shp");
+      const res = await fetch("/collaborator/display/shp", { method: "POST", body: shpData });
+      if (!res.ok) { const err = await safeJson(res); throw new Error(err.error || "Shapefile upload failed"); }
+      progressBr.style.width = "10%";
+    }
+
+    // Step 3 — CSVs
     for (let i = 0; i < precipCsvFiles.length; i++) {
       await uploadInChunks(precipCsvFiles[i], statusEl, progressBr, i + 1, precipCsvFiles.length, "Precip CSV", "precip");
       await sleep(100);
     }
-
     for (let i = 0; i < tempCsvFiles.length; i++) {
       await uploadInChunks(tempCsvFiles[i], statusEl, progressBr, i + 1, tempCsvFiles.length, "Temp CSV", "temp");
       await sleep(100);
     }
-
-    for (let i = 0; i < StreamFlowCsvFiles.length; i++) {
-      await uploadInChunks(StreamFlowCsvFiles[i], statusEl, progressBr, i + 1, StreamFlowCsvFiles.length, "StreamFlow CSV", "streamflow");
+    for (let i = 0; i < streamFlowCsvFiles.length; i++) {
+      await uploadInChunks(streamFlowCsvFiles[i], statusEl, progressBr, i + 1, streamFlowCsvFiles.length, "StreamFlow CSV", "streamflow");
+      await sleep(100);
+    }
+    for (let i = 0; i < waterLevelCsvFiles.length; i++) {
+      await uploadInChunks(waterLevelCsvFiles[i], statusEl, progressBr, i + 1, waterLevelCsvFiles.length, "WaterLevel CSV", "waterlevel");
       await sleep(100);
     }
 
-    for (let i = 0; i < WaterLevelCsvFiles.length; i++) {
-      await uploadInChunks(WaterLevelCsvFiles[i], statusEl, progressBr, i + 1, WaterLevelCsvFiles.length, "WaterLevel CSV", "waterlevel");
-      await sleep(100);
-    }
-
+    // Step 4 — Rasters
     for (let i = 0; i < rasterFiles.length; i++) {
       await uploadInChunks(rasterFiles[i], statusEl, progressBr, i + 1, rasterFiles.length, "Raster", "raster");
       await sleep(100);
     }
-
     for (let i = 0; i < lulcrasterFiles.length; i++) {
       await uploadInChunks(lulcrasterFiles[i], statusEl, progressBr, i + 1, lulcrasterFiles.length, "LULC Raster", "lulc_raster");
       await sleep(100);
     }
-
     for (let i = 0; i < poprasterFiles.length; i++) {
       await uploadInChunks(poprasterFiles[i], statusEl, progressBr, i + 1, poprasterFiles.length, "POP Raster", "pop_raster");
       await sleep(100);
     }
 
     progressBr.style.width = "100%";
-    statusEl.innerText = "✅ All files uploaded successfully!";
+    statusEl.innerText = "All files uploaded successfully!";
     window.location.href = "/collaborator/display";
+
   } catch (err) {
     console.error(err);
-    statusEl.innerText = "❌ Error: " + err.message;
+    statusEl.innerText = `❌ ${err.message}`;
     submitBtn.disabled = false;
   }
-
 };
-
-async function uploadInChunks(file, statusEl, progressEl, current, total, label, category) {
-  const CHUNK = 5 * 1024 * 1024;
-  const totalChunks = Math.ceil(file.size / CHUNK);
-
-  for (let i = 0; i < totalChunks; i++) {
-    const start = i * CHUNK;
-    const end = Math.min(start + CHUNK, file.size);
-    const data = new FormData();
-    data.append("file", file.slice(start, end));
-    data.append("filename", file.name);
-    data.append("chunkIndex", i);
-    data.append("totalChunks", totalChunks);
-    data.append("fileCategory", category);
-    data.append("fieldName", file.fieldName || "");
-
-    statusEl.innerText = `Uploading ${label} ${current}/${total} - ${file.name} (chunk ${i + 1}/${totalChunks})`;
-
-    const res = await fetch("/collaborator/display/upload-chunk", { method: "POST", body: data });
-    if (!res.ok) { const err = await res.json(); throw new Error(err.error || `Chunk ${i + 1} failed for ${file.name}`); }
-
-    progressEl.style.width = `${((i + 1) / totalChunks) * 100}%`;
-  }
-}
-
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-function logout() { localStorage.clear(); window.location.href = "/login"; }
 </script>
 </body>
 </html>

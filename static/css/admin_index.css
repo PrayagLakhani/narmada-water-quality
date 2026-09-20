@@ -73,7 +73,7 @@ html, body {
 
     .menu a {
       display: block;
-      padding: 12px 18px;
+      padding: 6px 12px;
       text-decoration: none;
       color: #333;
       border-bottom: 1px solid #eee;
@@ -122,7 +122,7 @@ html, body {
       background: #ffffff;
       padding: 12px 14px;
       width: 220px;
-      max-height: 60vh;
+      max-height: 52vh;
       overflow-y: auto;
       overflow-x: hidden;
       box-shadow: 0 3px 15px rgba(0,0,0,0.3);
@@ -131,7 +131,7 @@ html, body {
     }
 
     .input-box::-webkit-scrollbar {
-      width: 7px;
+      width: 10px;
     }
 
     .input-box::-webkit-scrollbar-thumb {

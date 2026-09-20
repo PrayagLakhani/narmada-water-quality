@@ -81,14 +81,37 @@
       </a>
 
       <a href="/admin/upload/testing" class="group bg-white border border-slate-200 rounded-xl p-6 hover:border-brand-400 hover:shadow-md transition-all flex flex-col items-start gap-4">
-        <div class="p-3 bg-teal-50 text-teal-600 rounded-lg group-hover:bg-teal-600 group-hover:text-white transition-colors">
+        <!-- <div class="p-3 bg-teal-50 text-teal-600 rounded-lg group-hover:bg-teal-600 group-hover:text-white transition-colors">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
+        </div> -->
+        <div class="p-3 bg-indigo-50 text-indigo-600 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
         </div>
         <div>
             <h3 class="text-lg font-bold text-slate-800 mb-1 group-hover:text-teal-600">Upload Testing Data</h3>
             <p class="text-sm text-slate-500 leading-relaxed">Send testing batches to validate model performance outcomes.</p>
         </div>
       </a>
+
+
+      <div class="group bg-white border border-slate-200 rounded-xl p-6 hover:border-brand-400 hover:shadow-md transition-all flex flex-col items-start gap-4">
+  <div class="p-3 bg-amber-50 text-amber-600 rounded-lg group-hover:bg-amber-600 group-hover:text-white transition-colors">
+      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path></svg>
+  </div>
+  <div class="w-full">
+      <h3 class="text-lg font-bold text-slate-800 mb-1">Upload Station Topology</h3>
+      <p class="text-sm text-slate-500 leading-relaxed mb-4">Upload <code class="text-xs bg-slate-100 px-1 py-0.5 rounded font-mono">upstream_to_downstream_stations.csv</code> to configure station routing for the GNN pipeline.</p>
+      <div class="flex items-center gap-3 w-full">
+        <input type="file" accept=".csv" id="stationsFile"
+          class="block w-full text-sm text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100 cursor-pointer" />
+        <button onclick="uploadStations()"
+          class="shrink-0 px-4 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-lg transition-colors">
+          Upload
+        </button>
+      </div>
+      <p id="stationsMsg" class="mt-2 text-sm hidden"></p>
+  </div>
+</div>
 
     </div>
   </main>
@@ -100,6 +123,49 @@ function toggleMenu(event) {
   if (event) event.stopPropagation();
   const menu = document.getElementById("menu");
   menu.classList.toggle("hidden");
+}
+
+async function uploadStations() {
+  const input = document.getElementById("stationsFile");
+  const msg = document.getElementById("stationsMsg");
+  const file = input.files[0];
+
+  msg.className = "mt-2 text-sm";
+  msg.classList.remove("hidden");
+
+  if (!file) {
+    msg.textContent = "Please select a CSV file first.";
+    msg.classList.add("text-red-500");
+    return;
+  }
+  if (!file.name.endsWith(".csv")) {
+    msg.textContent = "Only .csv files are accepted.";
+    msg.classList.add("text-red-500");
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("file", file);
+  msg.textContent = "Uploading…";
+  msg.classList.add("text-slate-400");
+
+  try {
+    const res = await fetch("/api/admin/upload/stations", { method: "POST", body: formData });
+    const data = await res.json();
+    msg.classList.remove("text-slate-400");
+    if (res.ok) {
+      msg.textContent = "✓ " + data.message;
+      msg.classList.add("text-green-600");
+      input.value = "";
+    } else {
+      msg.textContent = "✗ " + (data.error || "Upload failed.");
+      msg.classList.add("text-red-500");
+    }
+  } catch {
+    msg.classList.remove("text-slate-400");
+    msg.textContent = "✗ Network error. Please try again.";
+    msg.classList.add("text-red-500");
+  }
 }
 
 document.addEventListener("click", (event) => {
